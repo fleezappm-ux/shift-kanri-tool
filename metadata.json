@@ -1,0 +1,6 @@
+{
+  "name": "ShiftMaster GAS",
+  "description": "5名分のシフト管理システム。Google Apps Script連携機能付き。",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

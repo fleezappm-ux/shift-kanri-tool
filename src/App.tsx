@@ -1603,25 +1603,20 @@ export default function App() {
                       return (
                         <div className="dashboard-remark-editor">
                           <div className="dashboard-remark-editor-title"><CalendarDays className="w-4 h-4" />日付の補足・帯色</div>
-                          <Select value={targetDate} onValueChange={setRemarkEditDate}>
-                            <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
-                            <SelectContent className="bg-white border-border shadow-xl z-50">
-                              {dateRange.map(date => {
-                                const value = getDateStr(date);
-                                return <SelectItem key={value} value={value}>{format(date, "M/d（E）", { locale: ja })}</SelectItem>;
-                              })}
-                            </SelectContent>
-                          </Select>
-                          <Select
+                          <select className="dashboard-native-select" value={targetDate} onChange={(event) => setRemarkEditDate(event.target.value)}>
+                            {dateRange.map(date => {
+                              const value = getDateStr(date);
+                              return <option key={value} value={value}>{format(date, "M/d（E）", { locale: ja })}</option>;
+                            })}
+                          </select>
+                          <select
+                            className="dashboard-native-select"
                             value={targetRemark?.type || "なし"}
-                            onValueChange={(value) => handleGlobalRemarkTypeChange(targetDate, value as GlobalRemark["type"])}
+                            onChange={(event) => handleGlobalRemarkTypeChange(targetDate, event.target.value as GlobalRemark["type"])}
                             disabled={isLocked}
                           >
-                            <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="補足を選択" /></SelectTrigger>
-                            <SelectContent className="bg-white border-border shadow-xl z-50">
-                              {GLOBAL_REMARK_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                            {GLOBAL_REMARK_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                          </select>
                           {(targetRemark?.type === "コメント" || targetRemark?.type === "当番薬局") && (
                             <Input
                               className="h-9 bg-white"
@@ -1634,6 +1629,21 @@ export default function App() {
                         </div>
                       );
                     })()}
+                    <div className="dashboard-mobile-person-jump">
+                      <label htmlFor="dashboard-person-jump">個人シフトを見る</label>
+                      <select
+                        id="dashboard-person-jump"
+                        value=""
+                        onChange={(event) => {
+                          if (!event.target.value) return;
+                          setActiveTab(event.target.value);
+                          setIsFromAdmin(false);
+                        }}
+                      >
+                        <option value="">名前を選択</option>
+                        {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                      </select>
+                    </div>
                     <div className="dashboard-table-wrap overflow-x-auto">
                       <Table className="dashboard-table text-[13px]">
                         <TableHeader>
@@ -1802,7 +1812,7 @@ export default function App() {
                           </Badge>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {employees.map(emp => (
+                          {dashboardEmployees.map(emp => (
                             <div key={emp.id} className="flex gap-2">
                               <Input 
                                 defaultValue={emp.name}
@@ -1962,6 +1972,18 @@ export default function App() {
                           ※ 対応ブラウザ（Chrome / Edge）限定です。一度設定すると、次回以降は同じフォルダに自動で保存されます。
                         </p>
                       </div>
+
+                      <div className="pt-6 border-t border-slate-100">
+                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">シフトデータ出力</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <Button variant="outline" className="h-11 font-bold" onClick={downloadCSV}>
+                            <FileCode className="w-4 h-4 mr-2" />CSV出力
+                          </Button>
+                          <Button className="h-11 bg-green-600 hover:bg-green-700 text-white font-bold" onClick={downloadExcel}>
+                            <Grid3X3 className="w-4 h-4 mr-2" />Excel出力
+                          </Button>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -1980,8 +2002,8 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <Card className="border-border shadow-none">
-                      <CardHeader className="py-4 border-b border-border flex flex-row items-center justify-between">
+                    <Card className="employee-shift-card border-border shadow-none">
+                      <CardHeader className="employee-card-header py-4 border-b border-border flex flex-row items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2 group">
                             {isFromAdmin ? (
@@ -1996,7 +2018,7 @@ export default function App() {
                           </div>
                           <CardDescription className="text-xs">シフトの入力と休憩・実働時間の確認</CardDescription>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="employee-stats flex items-center gap-4">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground uppercase font-bold">出勤日数</span>
                             <Badge variant="secondary" className="bg-slate-50 text-slate-700 border-slate-100 font-bold">
@@ -2040,12 +2062,9 @@ export default function App() {
                         {isFromAdmin && (
                           <div className="mobile-employee-picker">
                             <span>編集する人</span>
-                            <Select value={emp.id} onValueChange={setActiveTab}>
-                              <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
-                              <SelectContent className="bg-white border-border shadow-xl z-50">
-                                {dashboardEmployees.map(employee => <SelectItem key={employee.id} value={employee.id}>{employee.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
+                            <select value={emp.id} onChange={(event) => setActiveTab(event.target.value)}>
+                              {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                            </select>
                             <Button
                               variant={isLocked ? "outline" : "default"}
                               className="h-9 font-bold"
@@ -2053,10 +2072,13 @@ export default function App() {
                             >
                               {isLocked ? "確定を解除" : "この月を確定"}
                             </Button>
+                            <Button variant="outline" className="h-9 font-bold" onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}>
+                              <Grid3X3 className="w-4 h-4 mr-2" />月の全体シフトを確認
+                            </Button>
                           </div>
                         )}
-                        <div className="overflow-x-auto">
-                          <Table className="text-[13px]">
+                        <div className="employee-shift-table-wrap overflow-x-auto">
+                          <Table className="employee-shift-table text-[13px]">
                             <TableHeader>
                               <TableRow className="bg-muted/30 hover:bg-muted/30">
                                 <TableHead className="w-16 h-10 font-bold text-muted-foreground border-r border-border">日付</TableHead>

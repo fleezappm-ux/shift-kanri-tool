@@ -57,9 +57,22 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
     const json = await callGas("getShifts");
     const rows: ShiftRow[] = json.shifts || [];
 
+    const serverNames = new Set<string>();
+    rows.forEach(row => {
+      if (row["社員名"]) serverNames.add(row["社員名"]);
+    });
+
     // 既存の従業員リスト（表示順・id）をなるべく維持しつつ、名前をキーにマージします。
+    // ただし「サーバーに同名データが無く、ローカルにもシフトが1件も無い」＝一度も使われていない
+    // 仮の初期従業員（従業員A〜E など）は、サーバーにデータがある場合は表示から外します。
     const byName = new Map<string, Employee>();
-    existingEmployees.forEach(emp => byName.set(emp.name, { ...emp, shifts: [] }));
+    existingEmployees.forEach(emp => {
+      const hasLocalShift = emp.shifts.some(s => s.shift || s.customShiftText || s.comment);
+      if (serverNames.size > 0 && !serverNames.has(emp.name) && !hasLocalShift) {
+        return; // 未使用の仮従業員はスキップ
+      }
+      byName.set(emp.name, { ...emp, shifts: [] });
+    });
 
     rows.forEach(row => {
       const name = row["社員名"] || "";

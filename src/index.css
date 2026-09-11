@@ -29,6 +29,32 @@ body { margin:0; background:#f5f7fa; }
 .shift-main tbody tr:hover { background-color:#f7f8ff!important; }
 .shift-main td:first-child,.shift-main th:first-child { position:sticky; left:0; z-index:10; background:inherit; }
 .shift-main input,.shift-main button { border-radius:9px; }
+.mobile-month-label,.dashboard-shift-compact { display:none; }
+.shift-bottom-nav { background:#fff!important; box-shadow:0 -10px 28px rgba(15,23,42,.12); isolation:isolate; }
+.home-toolbar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; }
+.home-week-button { display:flex; align-items:center; gap:4px; font-weight:700; }
+.home-week-button:last-child { justify-self:end; }
+.home-week-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:7px; }
+.home-day { min-width:0; padding:10px 4px; border:1px solid #dbe3ee; border-radius:12px!important; background:#fff; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.home-day span { font-size:12px; font-weight:700; }
+.home-day strong { color:#172033; font-size:18px; line-height:1.15; }
+.home-day small { color:#64748b; font-size:11px; }
+.home-day.is-today { border-color:#60a5fa; box-shadow:inset 0 0 0 1px #60a5fa; }
+.home-day.is-selected { color:#fff; border-color:#2563eb; background:#2563eb; box-shadow:0 8px 20px rgba(37,99,235,.22); }
+.home-day.is-selected span,.home-day.is-selected strong,.home-day.is-selected small { color:#fff!important; }
+.home-roster { border:1px solid #dbe3ee; border-radius:16px; background:#fff; padding:18px; box-shadow:0 14px 34px rgba(15,23,42,.06); }
+.home-roster-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-bottom:13px; }
+.home-roster-header p { margin:0 0 2px; color:#64748b; font-size:12px; font-weight:700; }
+.home-roster-header h2 { margin:0; color:#172033; font-size:20px; font-weight:850; }
+.home-roster-count { display:flex; align-items:center; gap:6px; color:#1d4ed8; background:#eff6ff; border-radius:999px; padding:7px 11px; font-size:12px; font-weight:800; }
+.home-remark { margin-bottom:10px; padding:8px 10px; border-radius:9px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:700; }
+.home-roster-list { border-top:1px solid #e8edf3; }
+.home-roster-row { width:100%; display:grid; grid-template-columns:minmax(72px,1fr) minmax(100px,1.5fr) minmax(90px,1fr) 18px; align-items:center; gap:10px; padding:13px 4px; border-bottom:1px solid #eef2f6; text-align:left; background:#fff; }
+.home-roster-row:hover { background:#f8fafc; }
+.home-employee-name { color:#172033; font-size:15px; font-weight:800; }
+.home-shift-value { color:#075985; font-size:14px; font-weight:800; }
+.home-shift-value.is-off { color:#94a3b8; }
+.home-work-time { min-height:18px; display:flex; align-items:center; gap:4px; color:#64748b; font-size:12px; }
 @media(max-width:900px){
   .shift-shell{flex-direction:column;height:auto!important;min-height:100vh;overflow:visible!important}
   .shift-sidebar{width:100%!important;padding:13px 15px!important;overflow:visible!important}
@@ -39,4 +65,46 @@ body { margin:0; background:#f5f7fa; }
   .shift-main{padding:15px!important;overflow:visible!important}.shift-main>header{align-items:stretch!important}
   .shift-main [role="tablist"]{flex-wrap:nowrap!important;justify-content:flex-start!important;overflow-x:auto!important}
   .shift-main [data-slot="card"]{border-radius:13px}
+}
+@media(max-width:767px){
+  body{overflow-x:hidden;background:#f5f7fa}
+  .shift-shell{width:100%;min-height:100dvh;padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+  .shift-main{width:100%;padding:12px 10px 18px!important;gap:10px!important;overflow-x:hidden!important}
+  .shift-main>div:last-child{overflow:visible!important;padding-top:0!important}
+  .shift-bottom-nav{min-height:68px;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid #cbd5e1!important}
+  .shift-bottom-nav button{background:#fff!important;min-height:68px}
+  .shift-page-header{gap:8px!important;margin:0!important}
+  .month-navigation{width:100%;justify-content:space-between;background:#fff!important;padding:5px!important}
+  .month-navigation>button{gap:2px;font-size:12px;font-weight:800}
+  .mobile-month-label{display:inline}
+  .shift-person-tabs,.shift-tab-arrows{display:none!important}
+  .dashboard-card{border-radius:14px!important;overflow:hidden!important}
+  .dashboard-card-header{padding:13px 12px!important;min-height:68px;align-items:center!important}
+  .dashboard-card-header h3{font-size:16px!important}
+  .dashboard-card-header p{font-size:12px!important}
+  .dashboard-card-meta{display:none!important}
+  .dashboard-table-wrap{width:100%;overflow-x:hidden!important;background:#fff;padding-bottom:82px}
+  .dashboard-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:separate!important}
+  .dashboard-table th,.dashboard-table td{min-width:0!important;padding-left:2px!important;padding-right:2px!important;text-align:center!important;border-color:#d8e0ea!important}
+  .dashboard-table th{font-size:10px!important;height:36px!important}
+  .dashboard-table td{font-size:10px!important;height:42px!important}
+  .dashboard-date-col{width:42px!important;max-width:42px!important;font-size:10px!important;left:0!important;z-index:12!important}
+  .dashboard-day-col{width:24px!important;max-width:24px!important}
+  .dashboard-employee-col,.dashboard-employee-cell{width:calc((100vw - 86px)/5)!important;max-width:calc((100vw - 86px)/5)!important}
+  .dashboard-employee-cell>div{font-size:9px!important;line-height:1.05!important;padding:2px 0!important;white-space:nowrap}
+  .dashboard-remarks-col{display:none!important}
+  .dashboard-shift-full{display:none}
+  .dashboard-shift-compact{display:inline;font-size:9px;line-height:1.05}
+  .dashboard-summary-row td{height:48px!important}
+  .dashboard-summary-row .dashboard-employee-cell span{font-size:9px!important}
+  .dashboard-summary-row .dashboard-employee-cell div{gap:0!important}
+  .home-toolbar{gap:5px}
+  .home-week-button{height:36px!important;padding:0 9px!important;font-size:12px!important}
+  .home-week-grid{gap:3px}
+  .home-day{padding:8px 1px;border-radius:10px!important}
+  .home-day span{font-size:11px}.home-day strong{font-size:17px}.home-day small{font-size:10px}
+  .home-roster{padding:14px 12px;border-radius:14px}
+  .home-roster-header h2{font-size:19px}
+  .home-roster-row{grid-template-columns:58px minmax(90px,1fr) 84px 14px;gap:6px;padding:13px 2px}
+  .home-employee-name{font-size:14px}.home-shift-value{font-size:13px}.home-work-time{font-size:11px}
 }

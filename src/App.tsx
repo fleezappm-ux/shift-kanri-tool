@@ -49,7 +49,7 @@ import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns }
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer } from "./lib/shift-sync";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
-import { HomeView } from "./components/HomeView";
+import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -208,6 +208,7 @@ export default function App() {
 
   // ホーム画面（週間カレンダー）用の状態
   const [homeWeekOffset, setHomeWeekOffset] = useState(0);
+  const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -369,6 +370,10 @@ export default function App() {
     });
   })();
   const todayStr = getDateStr(new Date());
+  const homeSelectedDateStr = homeSelectedDate && homeWeekDates.some(date => getDateStr(date) === homeSelectedDate)
+    ? homeSelectedDate
+    : (homeWeekDates.some(date => getDateStr(date) === todayStr) ? todayStr : getDateStr(homeWeekDates[0]));
+  const dashboardEmployees = sortEmployeesForDisplay(employees);
 
   // 表示中の期間について、日曜・祝日・年末年始をファーマシーOS側の判定ロジックで自動取得し、
   // まだ備考が付いていない日にだけ「祝日」を自動でセットします（既存の備考は上書きしません）。
@@ -502,10 +507,6 @@ export default function App() {
   const renameEmployee = (id: string, newName: string) => {
     setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, name: newName } : emp));
     toast.success("名前を変更しました");
-  };
-
-  const setEmployeeRole = (id: string, role: string) => {
-    setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, role } : emp));
   };
 
   const handleCustomTimeChange = (employeeId: string, date: string, field: "breakTime" | "workTime", value: string) => {
@@ -1337,15 +1338,15 @@ export default function App() {
       {/* Main Content */}
       <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6">
         {activeTab !== "home" && (
-        <header className="flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
-          <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
+        <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
+          <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
             <Button 
               variant="ghost" 
               size="sm" 
               className="h-9 px-3 rounded-lg hover:bg-white hover:shadow-sm transition-all"
               onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" /><span className="mobile-month-label">前月</span>
             </Button>
             
             <div className="flex items-center gap-3 px-4 py-1.5 bg-white rounded-lg shadow-xs border border-border/40">
@@ -1394,11 +1395,11 @@ export default function App() {
               className="h-9 px-3 rounded-lg hover:bg-white hover:shadow-sm transition-all"
               onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}
             >
-              <ChevronRight className="w-4 h-4" />
+              <span className="mobile-month-label">次月</span><ChevronRight className="w-4 h-4" />
             </Button>
           </div>
 
-          <TabsList className="bg-muted p-1 rounded-xl border border-border/50 h-auto flex flex-wrap justify-center overflow-visible">
+          <TabsList className="shift-person-tabs bg-muted p-1 rounded-xl border border-border/50 h-auto flex flex-wrap justify-center overflow-visible">
             <TabsTrigger 
               value="dashboard" 
               className="px-5 py-2 text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all" 
@@ -1416,7 +1417,7 @@ export default function App() {
             ))}
           </TabsList>
 
-          <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 ml-auto md:ml-0">
+          <div className="shift-tab-arrows flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 ml-auto md:ml-0">
             <Button 
               variant="ghost" 
               size="icon" 
@@ -1510,11 +1511,13 @@ export default function App() {
                 employees={employees}
                 remarks={globalRemarks}
                 weekDates={homeWeekDates}
+                selectedDate={homeSelectedDateStr}
                 today={todayStr}
                 weekOffset={homeWeekOffset}
                 heatmapEnabled={heatmapEnabled}
                 monthDates={dateRange}
                 onWeekOffsetChange={setHomeWeekOffset}
+                onDateSelect={setHomeSelectedDate}
                 onShowDashboard={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
               />
@@ -1526,8 +1529,8 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card className="border-border shadow-none">
-                  <CardHeader className="py-4 border-b border-border flex flex-row items-center justify-between">
+                <Card className="dashboard-card border-border shadow-none">
+                  <CardHeader className="dashboard-card-header py-4 border-b border-border flex flex-row items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 group">
                         {isEditingTitle ? (
@@ -1552,22 +1555,21 @@ export default function App() {
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy/MM/dd")} - ${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}
                       </CardDescription>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="dashboard-card-meta flex items-center gap-2">
                       <Badge variant="outline" className="text-[10px] font-normal">閲覧専用</Badge>
-                      <span className="text-[10px] text-muted-foreground">最終集約: 10分前</span>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table className="text-[13px]">
+                    <div className="dashboard-table-wrap overflow-x-auto">
+                      <Table className="dashboard-table text-[13px]">
                         <TableHeader>
                           <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="w-16 h-10 font-bold text-muted-foreground border-r border-border">日付</TableHead>
-                            <TableHead className="w-10 h-10 font-bold text-muted-foreground border-r border-border">曜</TableHead>
-                            {employees.map(emp => (
-                              <TableHead key={emp.id} className="font-bold text-muted-foreground border-r border-border min-w-[120px]">{emp.name}</TableHead>
+                            <TableHead className="dashboard-date-col w-16 h-10 font-bold text-muted-foreground border-r border-border">日付</TableHead>
+                            <TableHead className="dashboard-day-col w-10 h-10 font-bold text-muted-foreground border-r border-border">曜</TableHead>
+                            {dashboardEmployees.map(emp => (
+                              <TableHead key={emp.id} className="dashboard-employee-col font-bold text-muted-foreground border-r border-border min-w-[120px]">{emp.name}</TableHead>
                             ))}
-                            <TableHead className="font-bold text-muted-foreground min-w-[150px]">備考</TableHead>
+                            <TableHead className="dashboard-remarks-col font-bold text-muted-foreground min-w-[150px]">備考</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1578,12 +1580,14 @@ export default function App() {
 
                             return (
                               <TableRow key={date.toISOString()} className={`h-10 ${rowBgClass}`}>
-                                <TableCell className="py-2 border-r border-border">{format(date, "MM/dd")}</TableCell>
-                                <TableCell className="py-2 text-muted-foreground border-r border-border">{format(date, "E", { locale: ja })}</TableCell>
-                                {employees.map(emp => {
+                                <TableCell className="dashboard-date-col py-2 border-r border-border">{format(date, "MM/dd")}</TableCell>
+                                <TableCell className="dashboard-day-col py-2 text-muted-foreground border-r border-border">{format(date, "E", { locale: ja })}</TableCell>
+                                {dashboardEmployees.map(emp => {
                                   const s = getShift(emp, date);
+                                  const shiftText = s?.shift === "任意入力" ? (s?.customShiftText || "任意") : (s?.shift === "休み" ? "" : (s?.shift || "-"));
+                                  const compactParts = shiftText.includes("～") ? shiftText.split("～") : [shiftText];
                                   return (
-                                    <TableCell key={emp.id} className="py-1 px-1 border-r border-border">
+                                    <TableCell key={emp.id} className="dashboard-employee-cell py-1 px-1 border-r border-border">
                                       <div className={`text-[12px] py-1.5 rounded-sm text-center font-bold leading-none ${
                                         s?.shift === "有休" 
                                           ? "bg-red-100 text-red-800 border border-red-200" 
@@ -1595,12 +1599,13 @@ export default function App() {
                                                 ? "text-slate-900"
                                                 : "text-muted-foreground"
                                       }`}>
-                                        {s?.shift === "任意入力" ? (s?.customShiftText || "任意入力") : (s?.shift === "休み" ? "" : (s?.shift || "-"))}
+                                        <span className="dashboard-shift-full">{shiftText}</span>
+                                        <span className="dashboard-shift-compact">{compactParts[0]}{compactParts[1] && <><br />{compactParts[1]}</>}</span>
                                       </div>
                                     </TableCell>
                                   );
                                 })}
-                                <TableCell className="py-1 px-2">
+                                <TableCell className="dashboard-remarks-col py-1 px-2">
                                   <div className="flex flex-col gap-1">
                                     <Select 
                                       value={gr?.type || "なし"} 
@@ -1631,9 +1636,9 @@ export default function App() {
                             );
                           })}
                           {/* Summary Row */}
-                          <TableRow className="bg-muted/50 font-bold h-12">
+                          <TableRow className="dashboard-summary-row bg-muted/50 font-bold h-12">
                             <TableCell colSpan={2} className="text-right border-r border-border pr-4">月間合計</TableCell>
-                            {employees.map(emp => {
+                            {dashboardEmployees.map(emp => {
                               const stats = emp.shifts
                                 .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
                                 .reduce((acc, s) => {
@@ -1652,7 +1657,7 @@ export default function App() {
                                   };
                                 }, { hours: 0, paid: 0, attendance: 0 });
                               return (
-                                <TableCell key={emp.id} className="py-1 px-2 border-r border-border text-center">
+                                <TableCell key={emp.id} className="dashboard-employee-cell py-1 px-2 border-r border-border text-center">
                                   <div className="flex flex-col gap-0.5">
                                     <span className="text-slate-900 font-bold text-[12px]">{stats.hours.toFixed(1)}h</span>
                                     <div className="flex items-center justify-center gap-1">
@@ -1663,7 +1668,7 @@ export default function App() {
                                 </TableCell>
                               );
                             })}
-                            <TableCell className="bg-muted/30" />
+                            <TableCell className="dashboard-remarks-col bg-muted/30" />
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -1705,12 +1710,6 @@ export default function App() {
                                 onBlur={(e) => renameEmployee(emp.id, e.target.value)}
                                 className="h-10 text-sm bg-white border-slate-200 focus:border-primary/50 rounded-xl flex-1"
                                 placeholder="従業員名"
-                              />
-                              <Input 
-                                defaultValue={emp.role || ""}
-                                onBlur={(e) => setEmployeeRole(emp.id, e.target.value)}
-                                className="h-10 text-sm bg-white border-slate-200 focus:border-primary/50 rounded-xl w-28"
-                                placeholder="役職"
                               />
                               <Button 
                                 variant="outline" 

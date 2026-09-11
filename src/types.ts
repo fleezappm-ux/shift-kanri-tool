@@ -29,6 +29,5 @@ export interface GlobalRemark {
 export interface Employee {
   id: string;
   name: string;
-  role?: string; // 役職（ホーム画面などに表示）
   shifts: DayShift[];
 }

@@ -4,8 +4,15 @@ import { SHIFT_OPTIONS } from "../constants";
 // ファーマシーOSのGAS（Web App）のURL。デプロイし直してもURLは変わらない想定。
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
 
-// GAS側の SHIFT_API_KEY スクリプトプロパティと同じ値にしてください。
-const SHIFT_API_KEY = "sk_aoi_shift_9f3k2m8q7x";
+const SHIFT_API_KEY_STORAGE = "shift_api_key";
+
+export function hasShiftApiKey(): boolean {
+  return Boolean(localStorage.getItem(SHIFT_API_KEY_STORAGE));
+}
+
+export function saveShiftApiKey(value: string): void {
+  localStorage.setItem(SHIFT_API_KEY_STORAGE, value.trim());
+}
 
 interface ShiftRow {
   id: string;
@@ -26,10 +33,12 @@ export interface ShiftFetchResult {
 }
 
 async function callGas(action: string, extra: Record<string, unknown> = {}): Promise<any> {
+  const shiftApiKey = localStorage.getItem(SHIFT_API_KEY_STORAGE) || "";
+  if (!shiftApiKey) throw new Error("GAS接続キーが未設定です。設定画面で登録してください。");
   const response = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" }, // GAS doPostはContent-Typeに関わらずpostData.contentsを見るため、プリフライトを避けるtext/plainにしています
-    body: JSON.stringify({ action, shiftApiKey: SHIFT_API_KEY, ...extra })
+    body: JSON.stringify({ action, shiftApiKey, ...extra })
   });
   if (!response.ok) {
     throw new Error("サーバーとの通信に失敗しました（status " + response.status + "）");

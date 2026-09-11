@@ -49,7 +49,7 @@ import {
 import { Employee, ShiftType, GlobalRemark } from "./types";
 import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
-import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer } from "./lib/shift-sync";
+import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, hasShiftApiKey, saveShiftApiKey } from "./lib/shift-sync";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
 import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 
@@ -212,6 +212,8 @@ export default function App() {
   const [homeWeekOffset, setHomeWeekOffset] = useState(0);
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
   const [remarkEditDate, setRemarkEditDate] = useState<string>("");
+  const [shiftApiKeyInput, setShiftApiKeyInput] = useState("");
+  const [shiftApiKeyConfigured, setShiftApiKeyConfigured] = useState(hasShiftApiKey);
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -1982,6 +1984,31 @@ export default function App() {
                           <Button className="h-11 bg-green-600 hover:bg-green-700 text-white font-bold" onClick={downloadExcel}>
                             <Grid3X3 className="w-4 h-4 mr-2" />Excel出力
                           </Button>
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-100">
+                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">GAS接続キー</h4>
+                        <p className="text-xs text-slate-500 mb-3">この端末で最初の1回だけ設定します。GitHubには保存されません。</p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Input
+                            type="password"
+                            value={shiftApiKeyInput}
+                            onChange={(event) => setShiftApiKeyInput(event.target.value)}
+                            placeholder={shiftApiKeyConfigured ? "設定済み（変更する場合のみ入力）" : "SHIFT_API_KEYを入力"}
+                            className="h-11 flex-1"
+                          />
+                          <Button
+                            className="h-11 font-bold"
+                            disabled={!shiftApiKeyInput.trim()}
+                            onClick={() => {
+                              saveShiftApiKey(shiftApiKeyInput);
+                              setShiftApiKeyConfigured(true);
+                              setShiftApiKeyInput("");
+                              toast.success("GAS接続キーをこの端末に保存しました。画面を再読み込みします");
+                              window.setTimeout(() => window.location.reload(), 700);
+                            }}
+                          >接続キーを保存</Button>
                         </div>
                       </div>
                     </CardContent>

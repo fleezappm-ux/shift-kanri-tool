@@ -442,7 +442,10 @@ export default function App() {
     } catch (error) {
       console.error("月次一括保存に失敗しました:", error);
       setSyncState("offline");
-      toast.error("Notionへの保存に失敗しました。編集内容は端末内に残っています");
+      const detail = error instanceof Error ? error.message : "原因不明のエラー";
+      toast.error(`Notionへの保存に失敗しました：${detail}（編集内容は端末内に残っています）`, {
+        duration: 12000
+      });
     }
   };
 

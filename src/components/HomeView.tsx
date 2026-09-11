@@ -20,6 +20,22 @@ interface HomeViewProps {
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 
+// 表示順の固定リスト。ここに無い名前は末尾に追加されます。
+const DISPLAY_ORDER = ["降旗", "藤川", "金井", "本道", "児玉"];
+
+const AVATAR_COLORS = ["bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-violet-500", "bg-rose-500", "bg-cyan-600"];
+
+function sortEmployees(employees: Employee[]): Employee[] {
+  return [...employees].sort((a, b) => {
+    const ia = DISPLAY_ORDER.indexOf(a.name);
+    const ib = DISPLAY_ORDER.indexOf(b.name);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+
 function dateTone(remark: GlobalRemark | undefined, isSunday: boolean, isToday: boolean): "today" | "holiday" | "clinic" | "normal" {
   if (isToday) return "today";
   if (remark?.type === "祝日" || remark?.type === "店休日" || isSunday) return "holiday";
@@ -27,25 +43,32 @@ function dateTone(remark: GlobalRemark | undefined, isSunday: boolean, isToday: 
   return "normal";
 }
 
-const HEADER_CLASS: Record<string, string> = {
-  today: "bg-primary/10 text-primary",
-  holiday: "text-red-600",
-  clinic: "text-blue-600",
-  normal: "text-slate-500"
+const HEADER_BG: Record<string, string> = {
+  today: "bg-blue-600 text-white",
+  holiday: "bg-red-50 text-red-600",
+  clinic: "bg-blue-50 text-blue-600",
+  normal: "bg-slate-50 text-slate-500"
 };
 
-const CELL_BG_CLASS: Record<string, string> = {
-  today: "bg-primary/5",
-  holiday: "bg-red-50",
-  clinic: "bg-blue-50",
+const CELL_TINT: Record<string, string> = {
+  today: "bg-blue-50/60",
+  holiday: "bg-red-50/50",
+  clinic: "bg-blue-50/40",
   normal: ""
 };
+
+function shiftChipClass(label: string): string {
+  if (!label || label === "休み") return "text-slate-300";
+  if (label === "有休") return "bg-amber-100 text-amber-700";
+  return "bg-sky-100 text-sky-800";
+}
 
 export function HomeView({
   employees, remarks, weekDates, today, weekOffset, heatmapEnabled, monthDates,
   onWeekOffsetChange, onShowDashboard, onEmployeeSelect
 }: HomeViewProps) {
   const remarkFor = (dateStr: string) => remarks.find(item => item.date === dateStr);
+  const orderedEmployees = sortEmployees(employees);
 
   return (
     <motion.div
@@ -76,55 +99,69 @@ export function HomeView({
         </Button>
       </div>
 
-      <div className="border border-border rounded-xl overflow-x-auto">
-        <table className="border-collapse text-[11px] whitespace-nowrap w-full">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-card text-left font-semibold text-slate-600 px-3 py-2 border-r border-b border-border min-w-[76px]">
-                氏名
-              </th>
-              {weekDates.map(date => {
-                const dateStr = format(date, "yyyy-MM-dd");
-                const remark = remarkFor(dateStr);
-                const tone = dateTone(remark, date.getDay() === 0, dateStr === today);
-                return (
-                  <th key={dateStr} className={`px-2 py-2 border-b border-border font-semibold min-w-[64px] ${HEADER_CLASS[tone]}`}>
-                    <div>{WEEKDAY_LABELS[date.getDay()]}</div>
-                    <div className="text-sm">{date.getDate()}</div>
-                    {remark && remark.type !== "コメント" && (
-                      <div className="text-[9px] font-normal truncate max-w-[60px] mx-auto">{remark.type}</div>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {employees.map(emp => (
-              <tr key={emp.id}>
-                <td className="sticky left-0 z-10 bg-card text-left px-3 py-2 border-r border-b border-border">
-                  <button className="font-semibold text-slate-700 hover:underline" onClick={() => onEmployeeSelect(emp.id)}>
-                    {emp.name}
-                  </button>
-                  {emp.role && <div className="text-[9px] text-muted-foreground font-normal">{emp.role}</div>}
-                </td>
+      <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm bg-white">
+        <div className="overflow-x-auto">
+          <table style={{ borderCollapse: "separate", borderSpacing: 0 }} className="w-full text-[11px] whitespace-nowrap">
+            <thead>
+              <tr>
+                <th
+                  style={{ position: "sticky", left: 0, zIndex: 20, backgroundColor: "#ffffff", boxShadow: "2px 0 6px -2px rgba(15,23,42,0.15)" }}
+                  className="text-left font-semibold text-slate-500 px-3 py-2.5 min-w-[84px] border-b border-slate-200"
+                >
+                  氏名
+                </th>
                 {weekDates.map(date => {
                   const dateStr = format(date, "yyyy-MM-dd");
                   const remark = remarkFor(dateStr);
                   const tone = dateTone(remark, date.getDay() === 0, dateStr === today);
-                  const shift = emp.shifts.find(item => item.date === dateStr);
-                  const label = shift?.shift === "任意入力" ? (shift.customShiftText || "") : (shift?.shift || "");
-                  const isOff = label === "休み" || !label;
                   return (
-                    <td key={dateStr} className={`px-2 py-2 border-b border-border text-center ${CELL_BG_CLASS[tone]} ${isOff ? "text-muted-foreground" : "font-medium text-slate-700"}`}>
-                      {label || "-"}
-                    </td>
+                    <th key={dateStr} className={`px-2 py-2 border-b border-slate-200 font-semibold min-w-[62px] ${HEADER_BG[tone]}`}>
+                      <div className="text-[10px] opacity-80">{WEEKDAY_LABELS[date.getDay()]}</div>
+                      <div className="text-sm leading-tight">{date.getDate()}</div>
+                      {remark && remark.type !== "コメント" && (
+                        <div className="text-[8px] font-normal truncate max-w-[56px] mx-auto mt-0.5 opacity-90">{remark.type}</div>
+                      )}
+                    </th>
                   );
                 })}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {orderedEmployees.map((emp, idx) => (
+                <tr key={emp.id} className={idx % 2 === 1 ? "bg-slate-50/60" : ""}>
+                  <td
+                    style={{ position: "sticky", left: 0, zIndex: 20, backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#ffffff", boxShadow: "2px 0 6px -2px rgba(15,23,42,0.15)" }}
+                    className="px-2.5 py-2 border-b border-slate-100"
+                  >
+                    <button className="flex items-center gap-1.5 text-left" onClick={() => onEmployeeSelect(emp.id)}>
+                      <span className={`w-6 h-6 rounded-full ${AVATAR_COLORS[idx % AVATAR_COLORS.length]} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}>
+                        {emp.name.slice(0, 1)}
+                      </span>
+                      <span>
+                        <span className="block font-semibold text-slate-700 hover:underline">{emp.name}</span>
+                        {emp.role && <span className="block text-[9px] text-muted-foreground font-normal">{emp.role}</span>}
+                      </span>
+                    </button>
+                  </td>
+                  {weekDates.map(date => {
+                    const dateStr = format(date, "yyyy-MM-dd");
+                    const remark = remarkFor(dateStr);
+                    const tone = dateTone(remark, date.getDay() === 0, dateStr === today);
+                    const shift = emp.shifts.find(item => item.date === dateStr);
+                    const label = shift?.shift === "任意入力" ? (shift.customShiftText || "") : (shift?.shift || "");
+                    return (
+                      <td key={dateStr} className={`px-1.5 py-2 border-b border-slate-100 text-center ${CELL_TINT[tone]}`}>
+                        <span className={`inline-block rounded-md px-1.5 py-1 font-medium ${shiftChipClass(label)}`}>
+                          {label === "休み" ? "休み" : (label || "-")}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p className="text-[10px] text-muted-foreground px-1">← 横にスクロールすると全員ぶん確認できます</p>
 

@@ -107,6 +107,20 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
 }
 
 /**
+ * 指定期間内で「祝日・日曜・年末年始」とGASが判定した日付の一覧を取得します（yyyy-MM-dd形式の配列）。
+ * 取得できない場合は空配列を返します（呼び出し側で何もしない扱いにしてください）。
+ */
+export async function fetchHolidaysFromServer(startDate: string, endDate: string): Promise<string[]> {
+  try {
+    const json = await callGas("getShiftHolidays", { startDate, endDate });
+    return Array.isArray(json.holidays) ? json.holidays : [];
+  } catch (error) {
+    console.error("祝日情報の取得に失敗しました:", error);
+    return [];
+  }
+}
+
+/**
  * 表示中の1か月分を、ブラウザからGASへ1リクエストで送ります。
  * 空欄も含めて送るため、Notion側にある既存シフトの削除も反映できます。
  */

@@ -1,5 +1,20 @@
 
 import { ShiftType } from "../types";
+import { CyclePatterns } from "../constants";
+
+/** cyclePatterns（管理画面で編集可能なクール内容）から、指定した曜日・週の予定シフトを返します。 */
+export function resolveCycleShift(
+  patterns: CyclePatterns,
+  cycleType: number,
+  dayOfWeek: number,
+  isWeek2: boolean
+): ShiftType {
+  const pattern = patterns[cycleType];
+  if (!pattern) return "";
+  const entry = pattern[dayOfWeek];
+  if (!entry) return "";
+  return isWeek2 ? entry.week2 : entry.week1;
+}
 
 /**
  * 入力中のテキストを簡易的に正規化する (onChange用)

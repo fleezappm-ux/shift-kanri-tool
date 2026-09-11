@@ -46,9 +46,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Employee, ShiftType, GlobalRemark } from "./types";
-import { SHIFT_OPTIONS } from "./constants";
-import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText } from "./lib/shift-utils";
-import { fetchShiftsFromServer, saveMonthToServer } from "./lib/shift-sync";
+import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
+import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
+import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer } from "./lib/shift-sync";
+import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -91,7 +92,7 @@ export default function App() {
     return saved ? new Date(saved) : new Date();
   });
   const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("active_tab") || "dashboard";
+    return localStorage.getItem("active_tab") || "home";
   });
   const [lockedMonths, setLockedMonths] = useState<string[]>(() => {
     const saved = localStorage.getItem("locked_months");
@@ -138,7 +139,69 @@ export default function App() {
     if (!saved) return {};
     try { return JSON.parse(saved); } catch { return {}; }
   });
+  const [cyclePatterns, setCyclePatterns] = useState<CyclePatterns>(() => {
+    const saved = localStorage.getItem("cycle_patterns");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_CYCLE_PATTERNS, ...parsed };
+      } catch (e) {
+        console.error("Failed to parse cycle patterns", e);
+      }
+    }
+    return DEFAULT_CYCLE_PATTERNS;
+  });
   const [syncState, setSyncState] = useState<"loading" | "saved" | "dirty" | "saving" | "offline">("loading");
+
+  // 編集モード（従業員マスター・個別シート編集・アプリ詳細設定）へ入るための簡易パスワードゲート。
+  // ブラウザのタブ/セッションを閉じるまで有効です（sessionStorageに保存）。
+  const [hasEditAccess, setHasEditAccess] = useState(() => sessionStorage.getItem("edit_access") === "granted");
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const pendingEditActionRef = useRef<(() => void) | null>(null);
+
+  const requestEditAccess = (action: () => void) => {
+    if (hasEditAccess) {
+      action();
+      return;
+    }
+    pendingEditActionRef.current = action;
+    setPasswordInput("");
+    setShowPasswordModal(true);
+  };
+
+  // ページ再読み込み時、前回「アプリ詳細・環境設定」等の編集モードだった場合でも、
+  // このセッションでまだパスワードを入力していなければ編集モードを解除します。
+  useEffect(() => {
+    if (!hasEditAccess && isFromAdmin) {
+      setIsFromAdmin(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submitEditPassword = () => {
+    if (passwordInput === EDITOR_PASSWORD) {
+      setHasEditAccess(true);
+      sessionStorage.setItem("edit_access", "granted");
+      setShowPasswordModal(false);
+      const action = pendingEditActionRef.current;
+      pendingEditActionRef.current = null;
+      setPasswordInput("");
+      if (action) action();
+    } else {
+      toast.error("パスワードが違います");
+    }
+  };
+
+  // 保存先フォルダ（エクセル出力用）を覚えているか確認
+  const [outputFolderName, setOutputFolderName] = useState<string | null>(null);
+  useEffect(() => {
+    getRememberedFolderName().then(setOutputFolderName);
+  }, []);
+
+  // ホーム画面（週間カレンダー）用の状態
+  const [homeWeekOffset, setHomeWeekOffset] = useState(0);
+  const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -199,6 +262,10 @@ export default function App() {
     localStorage.setItem("cycle_assignments", JSON.stringify(cycleAssignments));
   }, [cycleAssignments]);
 
+  useEffect(() => {
+    localStorage.setItem("cycle_patterns", JSON.stringify(cyclePatterns));
+  }, [cyclePatterns]);
+
 
   useEffect(() => {
     localStorage.setItem("current_month", currentMonth.toISOString());
@@ -237,25 +304,7 @@ export default function App() {
     const current = new Date(date); current.setHours(0, 0, 0, 0);
     const weeksDiff = Math.floor((current.getTime() - anchorMonday.getTime()) / (7 * 86400000));
     const isWeek2 = ((weeksDiff % 2) + 2) % 2 === 1;
-    const day = date.getDay();
-    if ([1, 2, 3, 4].includes(cycleType)) {
-      const longShift: ShiftType = cycleType <= 2 ? "8:45～18:15" : "8:30～18:00";
-      if ([1, 2, 3, 5].includes(day)) return longShift;
-      if (day === 0) return "休み";
-      const thursdayWorks = (cycleType === 1 || cycleType === 3) ? !isWeek2 : isWeek2;
-      if (day === 4) return thursdayWorks ? "8:30～16:30" : "休み";
-      if (day === 6) return thursdayWorks ? "休み" : "8:30～13:30";
-    }
-    if (cycleType === 5) {
-      if ([1, 3, 5, 0].includes(day)) return "休み";
-      return day === 2 ? "9:30～13:30" : "9:00～13:00";
-    }
-    if (cycleType === 6) return [1, 3, 4, 5].includes(day) ? "9:00～13:00" : "休み";
-    if (cycleType === 7) {
-      if ([1, 2, 3, 5].includes(day)) return "8:45～18:15";
-      return day === 6 ? "8:30～13:30" : "休み";
-    }
-    return "";
+    return resolveCycleShift(cyclePatterns, cycleType, date.getDay(), isWeek2);
   };
 
   const createNextMonthShifts = () => {
@@ -294,6 +343,54 @@ export default function App() {
   };
 
   const dateRange = generateDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+
+  // ホーム画面用: 今日を含む週（月〜日）を、homeWeekOffset週分ずらして計算します。
+  const homeWeekDates: Date[] = (() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diffToMon + homeWeekOffset * 7);
+    monday.setHours(0, 0, 0, 0);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d;
+    });
+  })();
+  const todayStr = getDateStr(new Date());
+  const homeSelectedDateStr = homeSelectedDate && homeWeekDates.some(d => getDateStr(d) === homeSelectedDate)
+    ? homeSelectedDate
+    : (homeWeekDates.some(d => getDateStr(d) === todayStr) ? todayStr : getDateStr(homeWeekDates[0]));
+
+  // 表示中の期間について、日曜・祝日・年末年始をファーマシーOS側の判定ロジックで自動取得し、
+  // まだ備考が付いていない日にだけ「祝日」を自動でセットします（既存の備考は上書きしません）。
+  useEffect(() => {
+    if (dateRange.length === 0) return;
+    let cancelled = false;
+    const start = getDateStr(dateRange[0]);
+    const end = getDateStr(dateRange[dateRange.length - 1]);
+    (async () => {
+      const holidays = await fetchHolidaysFromServer(start, end);
+      if (cancelled || holidays.length === 0) return;
+      const newlyAdded: string[] = [];
+      setGlobalRemarks(prev => {
+        const existingDates = new Set(prev.map(r => r.date));
+        const additions: GlobalRemark[] = [];
+        holidays.forEach(d => {
+          if (!existingDates.has(d)) {
+            additions.push({ date: d, type: "祝日", text: "" });
+            newlyAdded.push(d);
+          }
+        });
+        if (additions.length === 0) return prev;
+        return [...prev, ...additions];
+      });
+      newlyAdded.forEach(d => setAllEmployeesOff(d));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthKey]);
 
   const saveCurrentMonth = async () => {
     if (syncState === "saving" || dateRange.length === 0) return;
@@ -392,6 +489,10 @@ export default function App() {
     toast.success("名前を変更しました");
   };
 
+  const setEmployeeRole = (id: string, role: string) => {
+    setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, role } : emp));
+  };
+
   const handleCustomTimeChange = (employeeId: string, date: string, field: "breakTime" | "workTime", value: string) => {
     if (isLocked) return;
     setEmployees(prev => prev.map(emp => {
@@ -473,74 +574,7 @@ export default function App() {
         const weeksDiff = Math.floor(msDiff / (7 * 24 * 60 * 60 * 1000));
         const isWeek2 = weeksDiff % 2 === 1;
 
-        let shift: ShiftType = "";
-        
-        if (cycleType === 1) {
-          // Cool 1: Week 1 (Mon-Wed, Fri: 8:45-18:15, Thu: 8:30-16:30, Sat-Sun: Off)
-          //         Week 2 (Mon-Wed, Fri: 8:45-18:15, Thu: Off, Sat: 8:30-13:30, Sun: Off)
-          if (!isWeek2) {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:45～18:15";
-            else if (dayOfWeek === 4) shift = "8:30～16:30";
-            else if (dayOfWeek === 6 || dayOfWeek === 0) shift = "休み";
-          } else {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:45～18:15";
-            else if (dayOfWeek === 4) shift = "休み";
-            else if (dayOfWeek === 6) shift = "8:30～13:30";
-            else if (dayOfWeek === 0) shift = "休み";
-          }
-        } else if (cycleType === 2) {
-          // Cool 2: Week 1 (Mon-Wed, Fri: 8:45-18:15, Thu: Off, Sat: 8:30-13:30, Sun: Off)
-          //         Week 2 (Mon-Wed, Fri: 8:45-18:15, Thu: 8:30-16:30, Sat-Sun: Off)
-          if (!isWeek2) {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:45～18:15";
-            else if (dayOfWeek === 4) shift = "休み";
-            else if (dayOfWeek === 6) shift = "8:30～13:30";
-            else if (dayOfWeek === 0) shift = "休み";
-          } else {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:45～18:15";
-            else if (dayOfWeek === 4) shift = "8:30～16:30";
-            else if (dayOfWeek === 6 || dayOfWeek === 0) shift = "休み";
-          }
-        } else if (cycleType === 3) {
-          // Cool 3: Same as Cool 1 but Mon-Wed, Fri is 8:30～18:00
-          if (!isWeek2) {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:30～18:00";
-            else if (dayOfWeek === 4) shift = "8:30～16:30";
-            else if (dayOfWeek === 6 || dayOfWeek === 0) shift = "休み";
-          } else {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:30～18:00";
-            else if (dayOfWeek === 4) shift = "休み";
-            else if (dayOfWeek === 6) shift = "8:30～13:30";
-            else if (dayOfWeek === 0) shift = "休み";
-          }
-        } else if (cycleType === 4) {
-          // Cool 4: Same as Cool 2 but Mon-Wed, Fri is 8:30～18:00
-          if (!isWeek2) {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:30～18:00";
-            else if (dayOfWeek === 4) shift = "休み";
-            else if (dayOfWeek === 6) shift = "8:30～13:30";
-            else if (dayOfWeek === 0) shift = "休み";
-          } else {
-            if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:30～18:00";
-            else if (dayOfWeek === 4) shift = "8:30～16:30";
-            else if (dayOfWeek === 6 || dayOfWeek === 0) shift = "休み";
-          }
-        } else if (cycleType === 5) {
-          // Cycle 5: Mon/Wed/Fri/Sun OFF, Tue 9:30-13:30, Thu/Sat 9:00-13:00
-          if ([1, 3, 5, 0].includes(dayOfWeek)) shift = "休み";
-          else if (dayOfWeek === 2) shift = "9:30～13:30";
-          else if (dayOfWeek === 4 || dayOfWeek === 6) shift = "9:00～13:00";
-        } else if (cycleType === 6) {
-          // Cycle 6: Mon/Wed/Thu/Fri 9:00-13:00, Tue/Sat/Sun OFF
-          if ([1, 3, 4, 5].includes(dayOfWeek)) shift = "9:00～13:00";
-          else if ([2, 6, 0].includes(dayOfWeek)) shift = "休み";
-        } else if (cycleType === 7) {
-          // Cool 7: Mon, Tue, Wed, Fri (8:45-18:15), Thu (OFF), Sat (8:30-13:30), Sun (OFF)
-          if ([1, 2, 3, 5].includes(dayOfWeek)) shift = "8:45～18:15";
-          else if (dayOfWeek === 4) shift = "休み";
-          else if (dayOfWeek === 6) shift = "8:30～13:30";
-          else if (dayOfWeek === 0) shift = "休み";
-        }
+        const shift: ShiftType = resolveCycleShift(cyclePatterns, cycleType, dayOfWeek, isWeek2);
 
         if (shift) {
           const { breakTime, workTime } = calculateTimes(shift);
@@ -577,6 +611,21 @@ export default function App() {
     }));
   };
 
+  /** 指定日を、全従業員「休み」にします（既に「休み」「有給」の人は変更しません）。祝日・店休日のデフォルト適用に使います。 */
+  const setAllEmployeesOff = (dateStr: string) => {
+    setEmployees(prev => prev.map(emp => {
+      const idx = emp.shifts.findIndex(s => s.date === dateStr);
+      if (idx >= 0) {
+        const currentShift = emp.shifts[idx].shift;
+        if (currentShift === "休み" || currentShift === "有給") return emp;
+        const newShifts = [...emp.shifts];
+        newShifts[idx] = { ...newShifts[idx], shift: "休み", customShiftText: undefined, breakTime: "0:00", workTime: "0:00" };
+        return { ...emp, shifts: newShifts };
+      }
+      return { ...emp, shifts: [...emp.shifts, { date: dateStr, shift: "休み" as ShiftType, breakTime: "0:00", workTime: "0:00", comment: "" }] };
+    }));
+  };
+
   const handleGlobalRemarkTypeChange = (date: string, type: GlobalRemark["type"]) => {
     if (isLocked) return;
     setGlobalRemarks(prev => {
@@ -593,6 +642,10 @@ export default function App() {
       }
       return newRemarks;
     });
+    // 祝日・店休日を選んだ場合は、その場で全従業員を休みにします。
+    if (type === "祝日" || type === "店休日") {
+      setAllEmployeesOff(date);
+    }
   };
 
   const handleGlobalRemarkTextChange = (date: string, text: string) => {
@@ -943,7 +996,13 @@ export default function App() {
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `shift_${currentMonthKey}.xlsx`);
+    const fileName = `shift_${currentMonthKey}.xlsx`;
+    const savedToFolder = await saveBufferToRememberedFolder(fileName, buffer as ArrayBuffer);
+    if (savedToFolder) {
+      toast.success(`保存先フォルダに ${fileName} を書き出しました`);
+    } else {
+      saveAs(new Blob([buffer]), fileName);
+    }
     toast.success("Excelファイルをダウンロードしました");
   };
 
@@ -1078,13 +1137,13 @@ export default function App() {
             <div className="flex flex-col gap-2.5">
             <Button 
                 variant="outline" 
-                className={`w-full justify-start h-12 px-4 text-sm font-semibold transition-all group relative overflow-hidden ${(activeTab === "dashboard" && !isFromAdmin) ? "bg-slate-100 border-slate-300 shadow-inner" : "bg-white hover:bg-slate-50 border-slate-200 shadow-xs"}`}
+                className={`w-full justify-start h-12 px-4 text-sm font-semibold transition-all group relative overflow-hidden ${(activeTab === "home" && !isFromAdmin) ? "bg-slate-100 border-slate-300 shadow-inner" : "bg-white hover:bg-slate-50 border-slate-200 shadow-xs"}`}
                 onClick={() => {
-                  setActiveTab("dashboard");
+                  setActiveTab("home");
                   setIsFromAdmin(false);
                 }}
               >
-                <div className={`absolute inset-y-0 left-0 w-1 transform -translate-x-full group-hover:translate-x-0 transition-transform ${(activeTab === "dashboard" && !isFromAdmin) ? "bg-blue-500 translate-x-0" : "bg-slate-400"}`} />
+                <div className={`absolute inset-y-0 left-0 w-1 transform -translate-x-full group-hover:translate-x-0 transition-transform ${(activeTab === "home" && !isFromAdmin) ? "bg-blue-500 translate-x-0" : "bg-slate-400"}`} />
                 <Home className="w-4 h-4 mr-3 text-blue-600" />
                 ホーム
               </Button>
@@ -1155,8 +1214,10 @@ export default function App() {
                 variant="outline" 
                 className={`w-full justify-start h-12 px-4 text-sm font-semibold transition-all group relative overflow-hidden ${(activeTab === "admin" && isFromAdmin) ? "bg-slate-100 border-slate-300 shadow-inner" : "bg-white hover:bg-slate-50 border-slate-200 shadow-xs"}`}
                 onClick={() => {
-                  setActiveTab("admin");
-                  setIsFromAdmin(true);
+                  requestEditAccess(() => {
+                    setActiveTab("admin");
+                    setIsFromAdmin(true);
+                  });
                 }}
               >
                 <div className={`absolute inset-y-0 left-0 w-1 transform -translate-x-full group-hover:translate-x-0 transition-transform ${(activeTab === "admin" && isFromAdmin) ? "bg-slate-800 translate-x-0" : "bg-slate-400"}`} />
@@ -1185,6 +1246,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 gap-6">
+        {activeTab !== "home" && (
         <header className="flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
             <Button 
@@ -1275,16 +1337,14 @@ export default function App() {
                 const currentIdx = allTabs.indexOf(activeTab);
                 const nextIdx = (currentIdx - 1 + allTabs.length) % allTabs.length;
                 const target = allTabs[nextIdx];
-                setActiveTab(target);
-                // When navigating via arrows, we should probably keep the mode (isFromAdmin) 
-                // but if we hit dashboard or admin, we might want to update it.
-                // However, the request implies 'Home' is a specific state.
-                if (target === "admin") setIsFromAdmin(true);
-                else if (target === "dashboard") {
-                  // If we arrive at dashboard via arrows, should it be Home or Admin-mode Dashboard?
-                  // Usually, navigation arrows are for quick switching in current mode.
-                  // But to keep it simple, let's say dashboard via arrows is Home.
-                  setIsFromAdmin(false);
+                if (target === "admin") {
+                  requestEditAccess(() => {
+                    setActiveTab(target);
+                    setIsFromAdmin(true);
+                  });
+                } else {
+                  setActiveTab(target);
+                  if (target === "dashboard") setIsFromAdmin(false);
                 }
               }}
             >
@@ -1300,9 +1360,15 @@ export default function App() {
                 const currentIdx = allTabs.indexOf(activeTab);
                 const nextIdx = (currentIdx + 1) % allTabs.length;
                 const target = allTabs[nextIdx];
-                setActiveTab(target);
-                if (target === "admin") setIsFromAdmin(true);
-                else if (target === "dashboard") setIsFromAdmin(false);
+                if (target === "admin") {
+                  requestEditAccess(() => {
+                    setActiveTab(target);
+                    setIsFromAdmin(true);
+                  });
+                } else {
+                  setActiveTab(target);
+                  if (target === "dashboard") setIsFromAdmin(false);
+                }
               }}
             >
               <ArrowRight className="w-4 h-4" />
@@ -1345,10 +1411,123 @@ export default function App() {
             </div>
           )}
         </header>
+        )}
 
         <div className="flex-1 overflow-y-auto min-h-0 pt-2">
           <AnimatePresence mode="wait">
-            {activeTab === "dashboard" ? (
+            {activeTab === "home" ? (
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-6"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
+                    <Button variant="ghost" size="sm" className="h-9 px-3 rounded-lg" onClick={() => setHomeWeekOffset(w => w - 1)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="px-3 text-sm font-bold text-slate-700">
+                      {format(homeWeekDates[0], "M月d日")} 〜 {format(homeWeekDates[6], "M月d日")}
+                    </span>
+                    <Button variant="ghost" size="sm" className="h-9 px-3 rounded-lg" onClick={() => setHomeWeekOffset(w => w + 1)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    {homeWeekOffset !== 0 && (
+                      <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" onClick={() => setHomeWeekOffset(0)}>
+                        今週
+                      </Button>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 text-xs"
+                    onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
+                  >
+                    全体表示 <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                  {homeWeekDates.map(date => {
+                    const dateStr = getDateStr(date);
+                    const isToday = dateStr === todayStr;
+                    const isSelected = dateStr === homeSelectedDateStr;
+                    const remark = getGlobalRemark(date);
+                    const working = employees
+                      .map(emp => ({ emp, shift: emp.shifts.find(s => s.date === dateStr) }))
+                      .filter(({ shift }) => shift?.shift && shift.shift !== "休み");
+                    return (
+                      <button
+                        key={dateStr}
+                        onClick={() => setHomeSelectedDate(dateStr)}
+                        className={`text-left rounded-xl border p-3 transition-all ${isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"} ${isToday ? "ring-1 ring-blue-300" : ""}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-bold text-slate-500">{format(date, "M/d")}（{["日", "月", "火", "水", "木", "金", "土"][date.getDay()]}）</span>
+                          {remark && remark.type !== "コメント" && (
+                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-red-200 text-red-600">{remark.type}</Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1 min-h-[40px]">
+                          {working.length === 0 ? (
+                            <span className="text-[10px] text-muted-foreground">予定なし</span>
+                          ) : working.map(({ emp }) => (
+                            <div key={emp.id} className="text-[11px] leading-tight">
+                              {emp.role && <span className="text-slate-400 mr-1">{emp.role}</span>}
+                              <span className="font-semibold text-slate-700">{emp.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Card className="border-border shadow-sm">
+                  <CardHeader className="py-4 border-b border-border">
+                    <CardTitle className="text-sm">
+                      {format(new Date(homeSelectedDateStr), "M月d日")}（{["日", "月", "火", "水", "木", "金", "土"][new Date(homeSelectedDateStr).getDay()]}）の詳細
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <div className="space-y-2">
+                      {employees.map(emp => {
+                        const shift = emp.shifts.find(s => s.date === homeSelectedDateStr);
+                        const label = shift?.shift === "任意入力" ? (shift.customShiftText || "") : (shift?.shift || "");
+                        return (
+                          <div key={emp.id} className="flex items-center justify-between text-xs border-b border-slate-100 last:border-0 py-2">
+                            <div className="flex items-center gap-2">
+                              {emp.role && <Badge variant="outline" className="text-[9px] px-1.5">{emp.role}</Badge>}
+                              <span
+                                className="font-semibold text-slate-700 cursor-pointer hover:underline"
+                                onClick={() => { setActiveTab(emp.id); setIsFromAdmin(false); }}
+                                title="この従業員の全体シフトを見る"
+                              >
+                                {emp.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-slate-500">
+                              <span className={!label ? "text-muted-foreground" : ""}>{label || "未入力"}</span>
+                              {shift && shift.shift && shift.shift !== "休み" && shift.shift !== "有給" && (
+                                <>
+                                  <span>休憩 {shift.breakTime}</span>
+                                  <span>実働 {shift.workTime}</span>
+                                </>
+                              )}
+                              {shift?.comment && <span className="italic text-slate-400">{shift.comment}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
                 initial={{ opacity: 0, y: 10 }}
@@ -1536,6 +1715,12 @@ export default function App() {
                                 className="h-10 text-sm bg-white border-slate-200 focus:border-primary/50 rounded-xl flex-1"
                                 placeholder="従業員名"
                               />
+                              <Input 
+                                defaultValue={emp.role || ""}
+                                onBlur={(e) => setEmployeeRole(emp.id, e.target.value)}
+                                className="h-10 text-sm bg-white border-slate-200 focus:border-primary/50 rounded-xl w-28"
+                                placeholder="役職"
+                              />
                               <Button 
                                 variant="outline" 
                                 size="icon"
@@ -1568,6 +1753,97 @@ export default function App() {
                             </div>
                           ))}
                         </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">クール内容の編集（曜日ごとの勤務時間）</h4>
+                        </div>
+                        <div className="space-y-6">
+                          {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                            <div key={num} className="border border-slate-200 rounded-xl p-4 bg-white">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold text-slate-700">{num}. {cycleNames[num]}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-[10px] px-2"
+                                  onClick={() => {
+                                    setCyclePatterns(prev => {
+                                      const pattern = prev[num].map(entry => ({ ...entry, week2: entry.week1 }));
+                                      return { ...prev, [num]: pattern };
+                                    });
+                                    toast.success("週1の内容を週2にコピーしました");
+                                  }}
+                                >
+                                  週1を週2にコピー
+                                </Button>
+                              </div>
+                              {(["week1", "week2"] as const).map(weekKey => (
+                                <div key={weekKey} className="grid grid-cols-7 gap-1.5 mb-1.5">
+                                  {["日", "月", "火", "水", "木", "金", "土"].map((label, dayIdx) => (
+                                    <div key={dayIdx} className="flex flex-col gap-1">
+                                      <span className="text-[9px] text-center text-muted-foreground">{weekKey === "week1" ? "週1" : "週2"}{label}</span>
+                                      <Select
+                                        value={cyclePatterns[num][dayIdx][weekKey]}
+                                        onValueChange={(val) => {
+                                          setCyclePatterns(prev => {
+                                            const pattern = [...prev[num]];
+                                            pattern[dayIdx] = { ...pattern[dayIdx], [weekKey]: val as ShiftType };
+                                            return { ...prev, [num]: pattern };
+                                          });
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8 text-[10px] px-1.5">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="">なし</SelectItem>
+                                          {SHIFT_OPTIONS.filter(o => o !== "任意入力").map(opt => (
+                                            <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))}
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                {num >= 5 ? "このクールは週1・週2を同じ内容にしておくと、隔週の切り替えなしで毎週同じパターンになります。" : ""}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-100">
+                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">エクセル出力の保存先</h4>
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs text-slate-600 flex-1">
+                            {outputFolderName
+                              ? <>現在の保存先: <span className="font-bold">{outputFolderName}</span></>
+                              : "保存先フォルダは未設定です（毎回ダウンロードフォルダに保存されます）"}
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-9 text-xs"
+                            onClick={async () => {
+                              const name = await chooseOutputFolder();
+                              if (name) {
+                                setOutputFolderName(name);
+                                toast.success(`保存先を「${name}」に設定しました`);
+                              } else {
+                                toast.info("この操作に対応していないブラウザか、選択がキャンセルされました");
+                              }
+                            }}
+                          >
+                            {outputFolderName ? "変更する" : "フォルダを選ぶ"}
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          ※ 対応ブラウザ（Chrome / Edge）限定です。一度設定すると、次回以降は同じフォルダに自動で保存されます。
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -1825,6 +2101,37 @@ export default function App() {
         </div>
       </main>
       <Toaster position="top-right" />
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800">編集者パスワード</h3>
+            <p className="text-xs text-muted-foreground">
+              管理薬剤師・SE兼任管理薬剤師・開設者のみ入力してください。
+            </p>
+            <Input
+              type="password"
+              autoFocus
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitEditPassword(); }}
+              placeholder="パスワードを入力"
+              className="h-10 text-sm"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="h-9 text-xs"
+                onClick={() => { setShowPasswordModal(false); pendingEditActionRef.current = null; setPasswordInput(""); }}
+              >
+                キャンセル
+              </Button>
+              <Button className="h-9 text-xs" onClick={submitEditPassword}>
+                確認
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Tabs>
   );
 }

@@ -127,3 +127,54 @@ export const SPREADSHEET_FORMULAS = {
   breakTime: '=IF(OR(C2="有給", C2="休み", C2=""), "0:00", IF(VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60) > 6, "1:00", "0:00"))',
   workTime: '=IF(OR(C2="有給", C2="休み", C2=""), "0:00", (VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60)) - VALUE(LEFT(D2, 1)) - VALUE(MID(D2, 3, 2))/60)'
 };
+
+// 編集モード（従業員マスター編集・個別シート編集・アプリ詳細設定）に入るための共通パスワード。
+// 変更したい場合はこの値を書き換えてください。
+export const EDITOR_PASSWORD = "aoi-kanri-2026";
+
+export interface CycleWeekPattern {
+  week1: ShiftType;
+  week2: ShiftType;
+}
+// 配列のインデックスは JavaScript の Date.getDay() と同じ並び: 0=日,1=月,2=火,3=水,4=木,5=金,6=土
+export type CyclePattern = CycleWeekPattern[];
+export type CyclePatterns = Record<number, CyclePattern>;
+
+const OFF: ShiftType = "休み";
+const wk = (mon: ShiftType, tue: ShiftType, wed: ShiftType, thu: ShiftType, fri: ShiftType, sat: ShiftType, sun: ShiftType): ShiftType[] =>
+  [sun, mon, tue, wed, thu, fri, sat];
+
+function buildPattern(week1: ShiftType[], week2: ShiftType[]): CyclePattern {
+  return week1.map((w1, i) => ({ week1: w1, week2: week2[i] }));
+}
+
+export const DEFAULT_CYCLE_PATTERNS: CyclePatterns = {
+  1: buildPattern(
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", "8:30～16:30", "8:45～18:15", OFF, OFF),
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", OFF, "8:45～18:15", "8:30～13:30", OFF)
+  ),
+  2: buildPattern(
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", OFF, "8:45～18:15", "8:30～13:30", OFF),
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", "8:30～16:30", "8:45～18:15", OFF, OFF)
+  ),
+  3: buildPattern(
+    wk("8:30～18:00", "8:30～18:00", "8:30～18:00", "8:30～16:30", "8:30～18:00", OFF, OFF),
+    wk("8:30～18:00", "8:30～18:00", "8:30～18:00", OFF, "8:30～18:00", "8:30～13:30", OFF)
+  ),
+  4: buildPattern(
+    wk("8:30～18:00", "8:30～18:00", "8:30～18:00", OFF, "8:30～18:00", "8:30～13:30", OFF),
+    wk("8:30～18:00", "8:30～18:00", "8:30～18:00", "8:30～16:30", "8:30～18:00", OFF, OFF)
+  ),
+  5: buildPattern(
+    wk(OFF, "9:30～13:30", OFF, "9:00～13:00", OFF, "9:00～13:00", OFF),
+    wk(OFF, "9:30～13:30", OFF, "9:00～13:00", OFF, "9:00～13:00", OFF)
+  ),
+  6: buildPattern(
+    wk("9:00～13:00", OFF, "9:00～13:00", "9:00～13:00", "9:00～13:00", OFF, OFF),
+    wk("9:00～13:00", OFF, "9:00～13:00", "9:00～13:00", "9:00～13:00", OFF, OFF)
+  ),
+  7: buildPattern(
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", OFF, "8:45～18:15", "8:30～13:30", OFF),
+    wk("8:45～18:15", "8:45～18:15", "8:45～18:15", OFF, "8:45～18:15", "8:30～13:30", OFF)
+  )
+};

@@ -4,10 +4,8 @@ import { ja } from "date-fns/locale/ja";
 import { 
   Bell,
   Trash2,
-  Calendar as CalendarIcon, 
   PlusCircle, 
   Download, 
-  Send, 
   Users, 
   FileCode,
   ChevronRight,
@@ -47,9 +45,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Employee, ShiftType, GlobalRemark } from "./types";
-import { SHIFT_OPTIONS, GAS_CODE, SPREADSHEET_LAYOUT, SPREADSHEET_FORMULAS } from "./constants";
+import { SHIFT_OPTIONS } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText } from "./lib/shift-utils";
-import { fetchShiftsFromServer, pushAllShiftsToServer } from "./lib/shift-sync";
+import { fetchShiftsFromServer, pushShiftToServer } from "./lib/shift-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -115,9 +113,6 @@ export default function App() {
   });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
-  const [lineToken, setLineToken] = useState(() => {
-    return localStorage.getItem("line_token") || "";
-  });
   const [cycleNames, setCycleNames] = useState<Record<number, string>>(() => {
     const saved = localStorage.getItem("cycle_names");
     if (saved) {
@@ -137,6 +132,12 @@ export default function App() {
       7: "クール7"
     };
   });
+  const [cycleAssignments, setCycleAssignments] = useState<Record<string, { cycleType: number; anchorDate: string }>>(() => {
+    const saved = localStorage.getItem("cycle_assignments");
+    if (!saved) return {};
+    try { return JSON.parse(saved); } catch { return {}; }
+  });
+  const [syncState, setSyncState] = useState<"loading" | "saved" | "saving" | "offline">("loading");
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -145,38 +146,53 @@ export default function App() {
 
   // 起動時に、他の端末で保存されたシフトをNotion（ファーマシーOS経由）から読み込みます。
   // 取得できた場合はそちらを優先し、取得できない場合（オフライン等）はlocalStorageの内容のまま使います。
-  const skipNextSyncRef = useRef(false);
+  const syncReadyRef = useRef(false);
+  const lastSyncedRef = useRef<Employee[]>(employees);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const merged = await fetchShiftsFromServer(employees);
-      if (!cancelled && merged) {
-        skipNextSyncRef.current = true; // 今読み込んだ内容をそのまま送り返さないようにする
-        setEmployees(merged);
+      if (!cancelled) {
+        const initial = merged || employees;
+        lastSyncedRef.current = initial;
+        if (merged) setEmployees(merged);
+        syncReadyRef.current = true;
+        setSyncState(merged ? "saved" : "offline");
       }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // データ保存（localStorageへの保存 ＋ Notionへの同期）
+  // 変更された日だけNotionへ同期する。起動時の読込が終わるまでは送信しない。
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (employees.length > 0) {
       localStorage.setItem("shift_data", JSON.stringify(employees));
     }
-    if (skipNextSyncRef.current) {
-      skipNextSyncRef.current = false;
-      return;
-    }
+    if (!syncReadyRef.current) return;
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    const previous = lastSyncedRef.current;
+    const previousByKey = new Map(previous.flatMap(emp => emp.shifts.map(shift => [`${emp.name}::${shift.date}`, JSON.stringify(shift)])));
+    const changed = employees.flatMap(emp => emp.shifts
+      .filter(shift => previousByKey.get(`${emp.name}::${shift.date}`) !== JSON.stringify(shift))
+      .map(shift => ({ employeeName: emp.name, shift }))
+    );
+    if (changed.length === 0) return;
+    setSyncState("saving");
     syncTimerRef.current = setTimeout(() => {
-      pushAllShiftsToServer(employees).then(({ fail }) => {
-        if (fail > 0) {
-          toast.error("一部のシフトの同期に失敗しました（オフラインの可能性があります）");
+      Promise.allSettled(changed.map(item => pushShiftToServer(item.employeeName, item.shift))).then(results => {
+        const failed = results.filter(result => result.status === "rejected").length;
+        if (failed > 0) {
+          setSyncState("offline");
+          toast.error(`${failed}件の同期に失敗しました。端末内には保存されています`);
+          return;
         }
+        lastSyncedRef.current = employees;
+        setSyncState("saved");
       });
-    }, 1500);
+    }, 700);
+    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
   }, [employees]);
 
   useEffect(() => {
@@ -196,8 +212,9 @@ export default function App() {
   }, [cycleNames]);
 
   useEffect(() => {
-    localStorage.setItem("line_token", lineToken);
-  }, [lineToken]);
+    localStorage.setItem("cycle_assignments", JSON.stringify(cycleAssignments));
+  }, [cycleAssignments]);
+
 
   useEffect(() => {
     localStorage.setItem("current_month", currentMonth.toISOString());
@@ -212,40 +229,49 @@ export default function App() {
       setLockedMonths(prev => prev.filter(m => m !== currentMonthKey));
       toast.info(`${format(currentMonth, "yyyy年MM月")}の編集ロックを解除しました`);
     } else {
-      // 祝日、店休日をメインの備考欄から選んでいる場合、
-      // シフトロックしたときに該当日にシフトが入っていた場合は休みに変更する
-      setEmployees(prev => prev.map(emp => {
-        const newShifts = [...emp.shifts];
-        let hasChanges = false;
-        
-        dateRange.forEach(date => {
-          const dateStr = getDateStr(date);
-          const gr = getGlobalRemark(date);
-          const isHolidayOrStoreClosed = gr?.type === "祝日" || gr?.type === "店休日";
-          
-          if (isHolidayOrStoreClosed) {
-            const shiftIdx = newShifts.findIndex(s => s.date === dateStr);
-            if (shiftIdx >= 0) {
-              const currentShift = newShifts[shiftIdx].shift;
-              if (currentShift && currentShift !== "休み" && currentShift !== "有給") {
-                newShifts[shiftIdx] = { 
-                  ...newShifts[shiftIdx], 
-                  shift: "休み", 
-                  breakTime: "0:00", 
-                  workTime: "0:00" 
-                };
-                hasChanges = true;
-              }
-            }
-          }
-        });
-        
-        return hasChanges ? { ...emp, shifts: newShifts } : emp;
-      }));
+      const conflicts = dateRange.reduce((total, date) => {
+        const remark = getGlobalRemark(date);
+        if (remark?.type !== "祝日" && remark?.type !== "店休日") return total;
+        return total + employees.filter(emp => {
+          const shift = emp.shifts.find(s => s.date === getDateStr(date))?.shift;
+          return Boolean(shift && shift !== "休み" && shift !== "有給");
+        }).length;
+      }, 0);
+      if (conflicts > 0) toast.warning(`店休日・祝日に勤務が${conflicts}件あります。内容は変更せず確定しました`);
 
       setLockedMonths(prev => [...prev, currentMonthKey]);
       toast.success(`${format(currentMonth, "yyyy年MM月")}のシフトを確定しました`);
     }
+  };
+
+  const getCycleShift = (date: Date, cycleType: number, anchorDateStr: string): ShiftType => {
+    const [ay, am, ad] = anchorDateStr.split("-").map(Number);
+    const anchor = new Date(ay, am - 1, ad);
+    const anchorMonday = new Date(anchor);
+    anchorMonday.setDate(anchor.getDate() + (anchor.getDay() === 0 ? -6 : 1 - anchor.getDay()));
+    anchorMonday.setHours(0, 0, 0, 0);
+    const current = new Date(date); current.setHours(0, 0, 0, 0);
+    const weeksDiff = Math.floor((current.getTime() - anchorMonday.getTime()) / (7 * 86400000));
+    const isWeek2 = ((weeksDiff % 2) + 2) % 2 === 1;
+    const day = date.getDay();
+    if ([1, 2, 3, 4].includes(cycleType)) {
+      const longShift: ShiftType = cycleType <= 2 ? "8:45～18:15" : "8:30～18:00";
+      if ([1, 2, 3, 5].includes(day)) return longShift;
+      if (day === 0) return "休み";
+      const thursdayWorks = (cycleType === 1 || cycleType === 3) ? !isWeek2 : isWeek2;
+      if (day === 4) return thursdayWorks ? "8:30～16:30" : "休み";
+      if (day === 6) return thursdayWorks ? "休み" : "8:30～13:30";
+    }
+    if (cycleType === 5) {
+      if ([1, 3, 5, 0].includes(day)) return "休み";
+      return day === 2 ? "9:30～13:30" : "9:00～13:00";
+    }
+    if (cycleType === 6) return [1, 3, 4, 5].includes(day) ? "9:00～13:00" : "休み";
+    if (cycleType === 7) {
+      if ([1, 2, 3, 5].includes(day)) return "8:45～18:15";
+      return day === 6 ? "8:30～13:30" : "休み";
+    }
+    return "";
   };
 
   const createNextMonthShifts = () => {
@@ -255,67 +281,20 @@ export default function App() {
     const nextMonthNum = nextMonthDate.getMonth() + 1;
     const nextDateRange = generateDateRange(nextYear, nextMonthNum);
     
-    // 当月のクールをそのまま引き継いで作成する
-    // 「クールを適用した時点」のロジックを再利用するか、
-    // あるいは単純に「曜日ごとのシフト」を現在の傾向から推測するかですが、
-    // ユーザーの要望は「当月のクールをそのまま引き継ぐ（当月の個別変更は無視）」
-    // なので、各従業員の「現在の月」における曜日ごとのシフト（クールのベース）を特定して適用します。
-    
     setEmployees(prev => prev.map(emp => {
       const newShifts = [...emp.shifts];
-      
-      // 1. 各従業員の「現在の月」のクールの傾向を把握する
-      // (最も頻繁に使われている曜日ごとのシフトを特定)
-      const weeklyPatterns: Record<number, { shift: ShiftType, breakTime: string, workTime: string } | null> = {};
-      
-      [0,1,2,3,4,5,6].forEach(dayOfWeek => {
-        const shiftsOnThisDay = dateRange
-          .filter(d => d.getDay() === dayOfWeek)
-          .map(d => emp.shifts.find(s => s.date === getDateStr(d)))
-          .filter(s => s && s.shift && s.shift !== "任意入力"); // 任意入力は引き継ぎにくいので除外
-        
-        if (shiftsOnThisDay.length > 0) {
-          // 最頻値を採用
-          const counts: Record<string, number> = {};
-          shiftsOnThisDay.forEach(s => {
-            if (s) counts[s.shift] = (counts[s.shift] || 0) + 1;
-          });
-          const topShift = Object.entries(counts).sort((a,b) => b[1] - a[1])[0][0] as ShiftType;
-          const sample = shiftsOnThisDay.find(s => s?.shift === topShift);
-          if (sample) {
-            weeklyPatterns[dayOfWeek] = {
-              shift: topShift,
-              breakTime: sample.breakTime,
-              workTime: sample.workTime
-            };
-          }
-        }
-      });
-
-      // 2. 翌月の各日にパターンを適用
+      const assignment = cycleAssignments[emp.id];
+      if (!assignment) return emp;
       nextDateRange.forEach(date => {
         const dateStr = getDateStr(date);
-        const dayOfWeek = date.getDay();
-        const pattern = weeklyPatterns[dayOfWeek];
-        
-        if (pattern) {
+        const shift = getCycleShift(date, assignment.cycleType, assignment.anchorDate);
+        if (shift) {
+          const { breakTime, workTime } = calculateTimes(shift);
           const existingIdx = newShifts.findIndex(s => s.date === dateStr);
           if (existingIdx >= 0) {
-            newShifts[existingIdx] = { 
-              ...newShifts[existingIdx], 
-              shift: pattern.shift, 
-              breakTime: pattern.breakTime, 
-              workTime: pattern.workTime,
-              comment: "" // 備考は無視（クリア）
-            };
+            newShifts[existingIdx] = { ...newShifts[existingIdx], shift, breakTime, workTime, customShiftText: undefined, comment: "" };
           } else {
-            newShifts.push({ 
-              date: dateStr, 
-              shift: pattern.shift, 
-              breakTime: pattern.breakTime, 
-              workTime: pattern.workTime, 
-              comment: "" 
-            });
+            newShifts.push({ date: dateStr, shift, breakTime, workTime, comment: "" });
           }
         }
       });
@@ -325,7 +304,9 @@ export default function App() {
 
     // 表示月を切り替え
     setCurrentMonth(nextMonthDate);
-    toast.success(`${nextMonthNum}月分のシートを作成し、表示を切り替えました。`);
+    const unassigned = employees.filter(emp => !cycleAssignments[emp.id]).length;
+    if (unassigned) toast.warning(`勤務パターン未設定の${unassigned}名は作成していません`);
+    else toast.success(`${nextMonthNum}月分を勤務パターンから作成しました`);
   };
 
   const dateRange = generateDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
@@ -437,6 +418,7 @@ export default function App() {
     const shiftToCopy = sourceShift?.shift || "";
     const breakToCopy = sourceShift?.breakTime || "0:00";
     const workToCopy = sourceShift?.workTime || "0:00";
+    const customShiftTextToCopy = sourceShift?.customShiftText;
 
     const datesToUpdate = dateRange
       .map(d => getDateStr(d))
@@ -448,9 +430,9 @@ export default function App() {
       datesToUpdate.forEach(date => {
         const idx = newShifts.findIndex(s => s.date === date);
         if (idx >= 0) {
-          newShifts[idx] = { ...newShifts[idx], shift: shiftToCopy as ShiftType, breakTime: breakToCopy, workTime: workToCopy };
+          newShifts[idx] = { ...newShifts[idx], shift: shiftToCopy as ShiftType, breakTime: breakToCopy, workTime: workToCopy, customShiftText: customShiftTextToCopy };
         } else {
-          newShifts.push({ date, shift: shiftToCopy as ShiftType, breakTime: breakToCopy, workTime: workToCopy, comment: "" });
+          newShifts.push({ date, shift: shiftToCopy as ShiftType, breakTime: breakToCopy, workTime: workToCopy, customShiftText: customShiftTextToCopy, comment: "" });
         }
       });
       return { ...e, shifts: newShifts };
@@ -572,6 +554,7 @@ export default function App() {
       return { ...e, shifts: newShifts };
     }));
     
+    setCycleAssignments(prev => ({ ...prev, [employeeId]: { cycleType, anchorDate: startDateStr } }));
     toast.success(`${cycleNames[cycleType]}を適用しました`);
   };
 
@@ -987,13 +970,13 @@ export default function App() {
   };
 
   return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="shift-shell flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-card border-r border-border p-6 flex flex-col shrink-0 overflow-y-auto">
+      <aside className="shift-sidebar w-64 bg-card border-r border-border p-6 flex flex-col shrink-0 overflow-y-auto">
         <div className="text-xl font-bold text-primary mb-8 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <CalendarIcon className="w-6 h-6" />
-            ShiftMaster Pro
+          <div className="flex items-center gap-3">
+            <img src="/shift-kanri-tool/shift-ai-logo.png" alt="" className="w-10 h-10 object-contain" />
+            <div className="leading-tight"><span className="block text-base">シフト管理</span><span className="block text-[10px] font-medium opacity-60 mt-1">PHARMACY SHIFT AI</span></div>
           </div>
           <div className="relative">
             <Button
@@ -1158,21 +1141,6 @@ export default function App() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start h-12 px-4 text-sm font-semibold bg-white hover:bg-slate-50 border-slate-200 transition-all group relative overflow-hidden" 
-                onClick={() => {
-                  if (!lineToken) {
-                    toast.error("LINEトークンが設定されていません。「環境設定」から設定してください。");
-                    return;
-                  }
-                  toast.success("LINE通知を送信しました");
-                }}
-              >
-                <div className="absolute inset-y-0 left-0 w-1 bg-emerald-500 transform -translate-x-full group-hover:translate-x-0 transition-transform" />
-                <Send className="w-4 h-4 mr-3 text-emerald-600" />
-                LINE通知送信
-              </Button>
             </div>
           </section>
 
@@ -1197,18 +1165,11 @@ export default function App() {
           </section>
         </div>
 
-        <div className="mt-auto pt-6">
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 text-[11px] leading-relaxed">
-            <span className="block font-bold text-blue-800 mb-1">休憩・実働 計算ロジック:</span>
-            <code className="text-blue-600 break-all">
-              D2: =IF(OR(C2="有給", C2="休み"), "0:00", IF(VALUE(MID(C2, SEARCH("～", C2)+1, 5)) - VALUE(LEFT(C2, SEARCH("～", C2)-1)) &gt; 6/24, "1:00", "0:00"))
-            </code>
-          </div>
-        </div>
+        <div className="sync-indicator mt-auto pt-6 flex items-center gap-2 text-xs"><span className={`sync-dot ${syncState}`} />{syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "Notionに保存中" : syncState === "offline" ? "端末内に保存" : "Notionに保存済み"}</div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden p-6 gap-6">
+      <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 gap-6">
         <header className="flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
             <Button 
@@ -1233,7 +1194,7 @@ export default function App() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-border shadow-2xl">
-                  {[2024, 2025, 2026, 2027, 2028].map(year => (
+                  {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
                     <SelectItem key={year} value={year.toString()} className="text-xs font-medium">{year}年</SelectItem>
                   ))}
                 </SelectContent>
@@ -1534,8 +1495,8 @@ export default function App() {
                 transition={{ duration: 0.2 }}
                 className="space-y-8"
               >
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <Card className="border-border shadow-sm col-span-1 lg:col-span-2">
+                <div className="grid grid-cols-1 gap-6">
+                  <Card className="border-border shadow-sm">
                     <CardHeader className="py-4 border-b border-border bg-slate-50/50 rounded-t-xl">
                       <CardTitle className="text-base flex items-center gap-2">
                         <Users className="w-4 h-4 text-primary" />
@@ -1596,93 +1557,8 @@ export default function App() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border shadow-sm border-emerald-100 h-fit">
-                    <CardHeader className="py-4 border-b border-emerald-50 bg-emerald-50/30 rounded-t-xl">
-                      <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
-                        <Send className="w-4 h-4 text-emerald-600" />
-                        LINE連携設定
-                      </CardTitle>
-                      <CardDescription className="text-emerald-700/70 text-xs">通知送信用のアクセストークンを設定します</CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-6 space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">LINE Notify トークン</label>
-                        <Input 
-                          type="password"
-                          value={lineToken}
-                          onChange={(e) => setLineToken(e.target.value)}
-                          placeholder="トークンを入力..."
-                          className="h-10 text-sm bg-white border-emerald-200 focus:border-emerald-500 rounded-xl"
-                        />
-                        <p className="text-[10px] text-muted-foreground leading-relaxed mt-2">
-                          ※ LINE Notifyの公式サイトで発行したトークンを貼り付けてください。この設定により、GAS経由での通知が可能になります。
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
                 </div>
 
-                <Card className="border-border shadow-none bg-slate-50/30">
-                  <CardHeader className="py-4 border-b border-border">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <FileCode className="w-4 h-4 text-slate-500" />
-                      スプレッドシート連携 (技術情報)
-                    </CardTitle>
-                    <CardDescription className="text-xs">スプレッドシート側で同期を行うための設定情報です</CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div className="space-y-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase">休憩時間計算式 (D列)</label>
-                          <div className="flex gap-2">
-                            <Input readOnly value={SPREADSHEET_FORMULAS.breakTime} className="text-[11px] font-mono bg-white h-9 border-slate-200" />
-                            <Button size="icon" variant="outline" className="h-9 w-9 shrink-0 bg-white" onClick={() => { navigator.clipboard.writeText(SPREADSHEET_FORMULAS.breakTime); toast.success("コピーしました"); }}>
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-muted-foreground uppercase">実働時間計算式 (E列)</label>
-                          <div className="flex gap-2">
-                            <Input readOnly value={SPREADSHEET_FORMULAS.workTime} className="text-[11px] font-mono bg-white h-9 border-slate-200" />
-                            <Button size="icon" variant="outline" className="h-9 w-9 shrink-0 bg-white" onClick={() => { navigator.clipboard.writeText(SPREADSHEET_FORMULAS.workTime); toast.success("コピーしました"); }}>
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-white p-4 rounded-xl border border-border shadow-sm">
-                        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">スプレッドシート構成図</h4>
-                        <pre className="text-[11px] whitespace-pre-wrap font-sans text-muted-foreground leading-relaxed">
-                          {SPREADSHEET_LAYOUT}
-                        </pre>
-                      </div>
-                    </div>
-
-                    <div className="pt-6 border-t border-slate-200 relative">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-bold text-slate-600 uppercase">Google Apps Script (GAS) コード</h4>
-                        <Button 
-                          variant="secondary"
-                          className="h-8 text-xs bg-slate-800 text-white hover:bg-slate-700" 
-                          size="sm"
-                          onClick={() => { navigator.clipboard.writeText(GAS_CODE); toast.success("コードをコピーしました"); }}
-                        >
-                          <Download className="w-3 h-3 mr-2" />
-                          コード全体をコピー
-                        </Button>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mb-3">
-                        ※ スプレッドシートの「拡張機能」→「Apps Script」を選択し、以下のコードを貼り付けて保存してください。
-                      </p>
-                      <pre className="bg-slate-900 text-slate-300 p-5 rounded-xl text-[10px] overflow-auto max-h-[300px] font-mono leading-relaxed border border-slate-800">
-                        {GAS_CODE}
-                      </pre>
-                    </div>
-                  </CardContent>
-                </Card>
               </motion.div>
             ) : (
               (() => {

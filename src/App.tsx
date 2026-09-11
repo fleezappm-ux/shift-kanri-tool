@@ -208,7 +208,6 @@ export default function App() {
 
   // ホーム画面（週間カレンダー）用の状態
   const [homeWeekOffset, setHomeWeekOffset] = useState(0);
-  const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -370,9 +369,6 @@ export default function App() {
     });
   })();
   const todayStr = getDateStr(new Date());
-  const homeSelectedDateStr = homeSelectedDate && homeWeekDates.some(d => getDateStr(d) === homeSelectedDate)
-    ? homeSelectedDate
-    : (homeWeekDates.some(d => getDateStr(d) === todayStr) ? todayStr : getDateStr(homeWeekDates[0]));
 
   // 表示中の期間について、日曜・祝日・年末年始をファーマシーOS側の判定ロジックで自動取得し、
   // まだ備考が付いていない日にだけ「祝日」を自動でセットします（既存の備考は上書きしません）。
@@ -1514,13 +1510,11 @@ export default function App() {
                 employees={employees}
                 remarks={globalRemarks}
                 weekDates={homeWeekDates}
-                selectedDate={homeSelectedDateStr}
                 today={todayStr}
                 weekOffset={homeWeekOffset}
                 heatmapEnabled={heatmapEnabled}
                 monthDates={dateRange}
                 onWeekOffsetChange={setHomeWeekOffset}
-                onDateSelect={setHomeSelectedDate}
                 onShowDashboard={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
               />

@@ -22,6 +22,7 @@ interface ShiftRow {
 export interface ShiftFetchResult {
   employees: Employee[];
   globalRemarks: GlobalRemark[];
+  supportsGlobalRemarks: boolean;
 }
 
 async function callGas(action: string, extra: Record<string, unknown> = {}): Promise<any> {
@@ -119,7 +120,8 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
       });
     });
 
-    return { employees: Array.from(byName.values()), globalRemarks: Array.from(remarksByDate.values()) };
+    const supportsGlobalRemarks = rows.some(row => Object.prototype.hasOwnProperty.call(row, "全体補足種別"));
+    return { employees: Array.from(byName.values()), globalRemarks: Array.from(remarksByDate.values()), supportsGlobalRemarks };
   } catch (error) {
     console.error("シフトのサーバー取得に失敗しました（オフラインの可能性）:", error);
     return null;

@@ -230,9 +230,12 @@ export default function App() {
       if (!cancelled) {
         if (merged) {
           skipDirtyRef.current = true;
-          skipRemarkDirtyRef.current = true;
           setEmployees(merged.employees);
-          setGlobalRemarks(merged.globalRemarks);
+          // GAS更新前のDBには全体補足プロパティがないため、その間は端末内の既存補足を消さない。
+          if (merged.supportsGlobalRemarks) {
+            skipRemarkDirtyRef.current = true;
+            setGlobalRemarks(merged.globalRemarks);
+          }
         }
         syncReadyRef.current = true;
         setSyncState(merged ? "saved" : "offline");

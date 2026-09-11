@@ -18,6 +18,7 @@ body { margin:0; background:#f5f7fa; }
 .sync-indicator { color:#d6e1ee!important; }
 .sync-dot { width:8px; height:8px; border-radius:999px; background:#27c7a7; box-shadow:0 0 0 4px rgba(39,199,167,.12); }
 .sync-dot.loading,.sync-dot.saving { background:#7f86ff; box-shadow:0 0 0 4px rgba(127,134,255,.13); }
+.sync-dot.dirty { background:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,.13); }
 .sync-dot.offline { background:#f59e0b; box-shadow:0 0 0 4px rgba(245,158,11,.13); }
 .shift-main { padding:28px 32px!important; }
 .shift-main [data-slot="card"] { border:1px solid #e1e6ed; border-radius:16px; background:rgba(255,255,255,.97); box-shadow:0 15px 40px rgba(20,34,50,.055); overflow:hidden; }

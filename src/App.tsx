@@ -14,7 +14,8 @@ import {
   Grid3X3,
   ArrowLeft,
   ArrowRight,
-  Home
+  Home,
+  CloudUpload
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ import {
 import { Employee, ShiftType, GlobalRemark } from "./types";
 import { SHIFT_OPTIONS } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText } from "./lib/shift-utils";
-import { fetchShiftsFromServer, pushShiftToServer } from "./lib/shift-sync";
+import { fetchShiftsFromServer, saveMonthToServer } from "./lib/shift-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -137,7 +138,7 @@ export default function App() {
     if (!saved) return {};
     try { return JSON.parse(saved); } catch { return {}; }
   });
-  const [syncState, setSyncState] = useState<"loading" | "saved" | "saving" | "offline">("loading");
+  const [syncState, setSyncState] = useState<"loading" | "saved" | "dirty" | "saving" | "offline">("loading");
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -147,15 +148,16 @@ export default function App() {
   // 起動時に、他の端末で保存されたシフトをNotion（ファーマシーOS経由）から読み込みます。
   // 取得できた場合はそちらを優先し、取得できない場合（オフライン等）はlocalStorageの内容のまま使います。
   const syncReadyRef = useRef(false);
-  const lastSyncedRef = useRef<Employee[]>(employees);
+  const skipDirtyRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const merged = await fetchShiftsFromServer(employees);
       if (!cancelled) {
-        const initial = merged || employees;
-        lastSyncedRef.current = initial;
-        if (merged) setEmployees(merged);
+        if (merged) {
+          skipDirtyRef.current = true;
+          setEmployees(merged);
+        }
         syncReadyRef.current = true;
         setSyncState(merged ? "saved" : "offline");
       }
@@ -164,35 +166,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 変更された日だけNotionへ同期する。起動時の読込が終わるまでは送信しない。
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 編集内容はまず端末内へ保存し、Notionへの反映は「Notionへ保存」ボタンでだけ行います。
   useEffect(() => {
     if (employees.length > 0) {
       localStorage.setItem("shift_data", JSON.stringify(employees));
     }
     if (!syncReadyRef.current) return;
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    const previous = lastSyncedRef.current;
-    const previousByKey = new Map(previous.flatMap(emp => emp.shifts.map(shift => [`${emp.name}::${shift.date}`, JSON.stringify(shift)])));
-    const changed = employees.flatMap(emp => emp.shifts
-      .filter(shift => previousByKey.get(`${emp.name}::${shift.date}`) !== JSON.stringify(shift))
-      .map(shift => ({ employeeName: emp.name, shift }))
-    );
-    if (changed.length === 0) return;
-    setSyncState("saving");
-    syncTimerRef.current = setTimeout(() => {
-      Promise.allSettled(changed.map(item => pushShiftToServer(item.employeeName, item.shift))).then(results => {
-        const failed = results.filter(result => result.status === "rejected").length;
-        if (failed > 0) {
-          setSyncState("offline");
-          toast.error(`${failed}件の同期に失敗しました。端末内には保存されています`);
-          return;
-        }
-        lastSyncedRef.current = employees;
-        setSyncState("saved");
-      });
-    }, 700);
-    return () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current); };
+    if (skipDirtyRef.current) {
+      skipDirtyRef.current = false;
+      return;
+    }
+    setSyncState("dirty");
   }, [employees]);
 
   useEffect(() => {
@@ -310,6 +294,24 @@ export default function App() {
   };
 
   const dateRange = generateDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+
+  const saveCurrentMonth = async () => {
+    if (syncState === "saving" || dateRange.length === 0) return;
+    setSyncState("saving");
+    try {
+      const result = await saveMonthToServer(
+        employees,
+        getDateStr(dateRange[0]),
+        getDateStr(dateRange[dateRange.length - 1])
+      );
+      setSyncState("saved");
+      toast.success(`${format(currentMonth, "yyyy年MM月")}をNotionへ保存しました（新規${result.created}・更新${result.updated}）`);
+    } catch (error) {
+      console.error("月次一括保存に失敗しました:", error);
+      setSyncState("offline");
+      toast.error("Notionへの保存に失敗しました。編集内容は端末内に残っています");
+    }
+  };
 
   const handleShiftChange = (employeeId: string, date: string, shift: ShiftType | "none") => {
     if (isLocked) {
@@ -1165,7 +1167,20 @@ export default function App() {
           </section>
         </div>
 
-        <div className="sync-indicator mt-auto pt-6 flex items-center gap-2 text-xs"><span className={`sync-dot ${syncState}`} />{syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "Notionに保存中" : syncState === "offline" ? "端末内に保存" : "Notionに保存済み"}</div>
+        <div className="mt-auto pt-6 space-y-2">
+          <Button
+            className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
+            onClick={saveCurrentMonth}
+            disabled={syncState === "loading" || syncState === "saving" || syncState === "saved"}
+          >
+            <CloudUpload className="w-4 h-4 mr-2" />
+            {syncState === "saving" ? "保存中…" : "Notionへ保存"}
+          </Button>
+          <div className="sync-indicator flex items-center gap-2 text-xs">
+            <span className={`sync-dot ${syncState}`} />
+            {syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "月単位で保存中" : syncState === "dirty" ? "未保存の変更あり" : syncState === "offline" ? "保存失敗（端末内に保存済み）" : "Notionに保存済み"}
+          </div>
+        </div>
       </aside>
 
       {/* Main Content */}

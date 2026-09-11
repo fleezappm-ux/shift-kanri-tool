@@ -106,35 +106,41 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
   }
 }
 
-/** 1人・1日分のシフトをサーバー（Notion）へ保存します（社員名＋日付で新規/上書きを自動判定）。 */
-export async function pushShiftToServer(employeeName: string, dayShift: DayShift): Promise<void> {
-  const dateOnly = dayShift.date.slice(0, 10);
-  await callGas("saveShift", {
-    shift: {
-      "社員名": employeeName,
-      "日付": dateOnly,
-      "シフト内容": buildShiftContent(dayShift.shift, dayShift.customShiftText),
-      "休憩時間": dayShift.breakTime,
-      "実働時間": dayShift.workTime,
-      "備考": dayShift.comment
-    }
-  });
-}
+/**
+ * 表示中の1か月分を、ブラウザからGASへ1リクエストで送ります。
+ * 空欄も含めて送るため、Notion側にある既存シフトの削除も反映できます。
+ */
+export async function saveMonthToServer(
+  employees: Employee[],
+  periodStart: string,
+  periodEnd: string
+): Promise<{ created: number; updated: number; cleared: number }> {
+  const shifts = employees.flatMap(employee => {
+    const shiftsByDate = new Map(employee.shifts.map(shift => [shift.date.slice(0, 10), shift]));
+    const rows = [];
+    const cursor = new Date(`${periodStart}T00:00:00`);
+    const last = new Date(`${periodEnd}T00:00:00`);
 
-/** 全従業員の全シフトを、サーバーへまとめて（順番に）反映します。件数が多いと時間がかかるため、変更のたびに毎回呼ぶのではなく、デバウンスして使ってください。 */
-export async function pushAllShiftsToServer(employees: Employee[]): Promise<{ ok: number; fail: number }> {
-  let ok = 0;
-  let fail = 0;
-  for (const emp of employees) {
-    for (const dayShift of emp.shifts) {
-      try {
-        await pushShiftToServer(emp.name, dayShift);
-        ok++;
-      } catch (error) {
-        console.error("シフト同期エラー:", emp.name, dayShift.date, error);
-        fail++;
-      }
+    while (cursor <= last) {
+      const date = cursor.toISOString().slice(0, 10);
+      const dayShift = shiftsByDate.get(date);
+      rows.push({
+        "社員名": employee.name,
+        "日付": date,
+        "シフト内容": dayShift ? buildShiftContent(dayShift.shift, dayShift.customShiftText) : "",
+        "休憩時間": dayShift?.breakTime || "",
+        "実働時間": dayShift?.workTime || "",
+        "備考": dayShift?.comment || ""
+      });
+      cursor.setDate(cursor.getDate() + 1);
     }
-  }
-  return { ok, fail };
+    return rows;
+  });
+
+  const json = await callGas("saveShiftMonth", { periodStart, periodEnd, shifts });
+  return {
+    created: Number(json.created || 0),
+    updated: Number(json.updated || 0),
+    cleared: Number(json.cleared || 0)
+  };
 }

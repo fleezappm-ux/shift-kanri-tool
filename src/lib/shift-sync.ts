@@ -160,7 +160,12 @@ export async function saveMonthToServer(
     const last = new Date(`${periodEnd}T00:00:00`);
 
     while (cursor <= last) {
-      const date = cursor.toISOString().slice(0, 10);
+      // toISOString()は日本時間の深夜を前日のUTCへ変換してしまうため、端末の暦日をそのまま組み立てます。
+      const date = [
+        cursor.getFullYear(),
+        String(cursor.getMonth() + 1).padStart(2, "0"),
+        String(cursor.getDate()).padStart(2, "0")
+      ].join("-");
       const dayShift = shiftsByDate.get(date);
       rows.push({
         "社員名": employee.name,

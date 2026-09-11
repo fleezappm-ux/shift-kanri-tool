@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, addMonths } from "date-fns";
 import { ja } from "date-fns/locale/ja";
 import { 
@@ -49,6 +49,7 @@ import {
 import { Employee, ShiftType, GlobalRemark } from "./types";
 import { SHIFT_OPTIONS, GAS_CODE, SPREADSHEET_LAYOUT, SPREADSHEET_FORMULAS } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText } from "./lib/shift-utils";
+import { fetchShiftsFromServer, pushAllShiftsToServer } from "./lib/shift-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -142,17 +143,40 @@ export default function App() {
 
   const getDateStr = (date: Date) => format(date, "yyyy-MM-dd");
 
-  // 以前の初期データ読み込み useEffect は不要になったので整理（もしくは初期化時以外のアクションがあれば残す）
+  // 起動時に、他の端末で保存されたシフトをNotion（ファーマシーOS経由）から読み込みます。
+  // 取得できた場合はそちらを優先し、取得できない場合（オフライン等）はlocalStorageの内容のまま使います。
+  const skipNextSyncRef = useRef(false);
   useEffect(() => {
-    // 依存関係のない初期化処理のみ残す
-    // すでに useState の初期値で localStorage から読み込むように変更したため、ここでの set 系は削除
+    let cancelled = false;
+    (async () => {
+      const merged = await fetchShiftsFromServer(employees);
+      if (!cancelled && merged) {
+        skipNextSyncRef.current = true; // 今読み込んだ内容をそのまま送り返さないようにする
+        setEmployees(merged);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // データ保存
+  // データ保存（localStorageへの保存 ＋ Notionへの同期）
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (employees.length > 0) {
       localStorage.setItem("shift_data", JSON.stringify(employees));
     }
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      pushAllShiftsToServer(employees).then(({ fail }) => {
+        if (fail > 0) {
+          toast.error("一部のシフトの同期に失敗しました（オフラインの可能性があります）");
+        }
+      });
+    }, 1500);
   }, [employees]);
 
   useEffect(() => {

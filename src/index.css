@@ -30,7 +30,23 @@ body { margin:0; background:#f5f7fa; }
 .shift-main td:first-child,.shift-main th:first-child { position:sticky; left:0; z-index:10; background:inherit; }
 .shift-main input,.shift-main button { border-radius:9px; }
 .mobile-month-label,.dashboard-shift-compact { display:none; }
+.home-brand-header { min-height:94px; display:flex; align-items:center; gap:14px; padding:18px 22px; border-radius:18px; color:#fff; background:linear-gradient(135deg,#0757c7 0%,#1374e8 62%,#20a4f3 100%); box-shadow:0 14px 30px rgba(7,87,199,.22); overflow:hidden; position:relative; }
+.home-brand-header::after { content:""; position:absolute; width:150px; height:150px; right:-45px; top:-72px; border:26px solid rgba(255,255,255,.11); border-radius:999px; }
+.home-brand-header img { width:50px; height:50px; padding:5px; border-radius:15px; background:rgba(255,255,255,.16); box-shadow:inset 0 0 0 1px rgba(255,255,255,.2); }
+.home-brand-header span { display:block; font-size:10px; font-weight:800; letter-spacing:.16em; opacity:.8; }
+.home-brand-header h1 { margin:2px 0 0; font-size:24px; line-height:1; font-weight:900; letter-spacing:.02em; }
 .shift-bottom-nav { background:#fff!important; box-shadow:0 -10px 28px rgba(15,23,42,.12); isolation:isolate; }
+.shift-row-holiday>td { background:#fee2e2!important; }
+.shift-row-clinic-closed>td { background:#dbeafe!important; }
+.dashboard-employee-link { width:100%; min-height:34px; display:flex; align-items:center; justify-content:center; gap:2px; color:#334155; font-weight:800; }
+.dashboard-employee-link:hover { color:#1d4ed8; background:#eff6ff; }
+.dashboard-remark-editor { display:grid; grid-template-columns:auto 150px 190px minmax(160px,1fr); align-items:center; gap:10px; padding:12px 14px; background:#eff6ff; border-bottom:1px solid #bfdbfe; }
+.dashboard-remark-editor-title { display:flex; align-items:center; gap:6px; color:#1e40af; font-size:12px; font-weight:800; white-space:nowrap; }
+.admin-shift-entry { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; color:#fff; border-radius:16px; background:linear-gradient(135deg,#0f4fb8,#1677e8); box-shadow:0 12px 28px rgba(15,79,184,.18); }
+.admin-shift-entry p { margin:0 0 3px; font-size:16px; font-weight:900; }
+.admin-shift-entry span { font-size:12px; opacity:.82; }
+.admin-shift-entry button { background:#fff!important; color:#1358b8!important; }
+.mobile-employee-picker { display:none; }
 .home-toolbar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; }
 .home-week-button { display:flex; align-items:center; gap:4px; font-weight:700; }
 .home-week-button:last-child { justify-self:end; }
@@ -83,6 +99,12 @@ body { margin:0; background:#f5f7fa; }
   .dashboard-card-header h3{font-size:16px!important}
   .dashboard-card-header p{font-size:12px!important}
   .dashboard-card-meta{display:none!important}
+  .dashboard-card-actions{margin-left:auto}
+  .dashboard-card-actions button{height:34px!important;padding:0 10px!important;font-size:11px!important}
+  .dashboard-card-actions [data-slot="badge"]{font-size:10px!important;padding:5px 7px!important}
+  .dashboard-remark-editor{grid-template-columns:1fr 1fr;padding:10px;gap:7px}
+  .dashboard-remark-editor-title{grid-column:1/-1;font-size:12px}
+  .dashboard-remark-editor input{grid-column:1/-1}
   .dashboard-table-wrap{width:100%;overflow-x:hidden!important;background:#fff;padding-bottom:82px}
   .dashboard-table{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:separate!important}
   .dashboard-table th,.dashboard-table td{min-width:0!important;padding-left:2px!important;padding-right:2px!important;text-align:center!important;border-color:#d8e0ea!important}
@@ -99,6 +121,8 @@ body { margin:0; background:#f5f7fa; }
   .dashboard-summary-row .dashboard-employee-cell span{font-size:9px!important}
   .dashboard-summary-row .dashboard-employee-cell div{gap:0!important}
   .home-toolbar{gap:5px}
+  .home-brand-header{min-height:82px;padding:15px 17px;border-radius:15px}
+  .home-brand-header img{width:45px;height:45px}.home-brand-header h1{font-size:22px}
   .home-week-button{height:36px!important;padding:0 9px!important;font-size:12px!important}
   .home-week-grid{gap:3px}
   .home-day{padding:8px 1px;border-radius:10px!important}
@@ -107,4 +131,9 @@ body { margin:0; background:#f5f7fa; }
   .home-roster-header h2{font-size:19px}
   .home-roster-row{grid-template-columns:58px minmax(90px,1fr) 84px 14px;gap:6px;padding:13px 2px}
   .home-employee-name{font-size:14px}.home-shift-value{font-size:13px}.home-work-time{font-size:11px}
+  .admin-shift-entry{align-items:stretch;flex-direction:column;padding:16px;gap:12px}
+  .admin-shift-entry button{width:100%}
+  .mobile-employee-picker{display:grid;grid-template-columns:74px 1fr;align-items:center;gap:8px;padding:10px;background:#eff6ff;border-bottom:1px solid #bfdbfe}
+  .mobile-employee-picker>span{color:#1e40af;font-size:12px;font-weight:800}
+  .mobile-employee-picker>button{grid-column:1/-1}
 }

@@ -15,7 +15,9 @@ import {
   ArrowLeft,
   ArrowRight,
   Home,
-  CloudUpload
+  CloudUpload,
+  CalendarDays,
+  PencilLine
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -209,6 +211,7 @@ export default function App() {
   // ホーム画面（週間カレンダー）用の状態
   const [homeWeekOffset, setHomeWeekOffset] = useState(0);
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
+  const [remarkEditDate, setRemarkEditDate] = useState<string>("");
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
@@ -1066,10 +1069,10 @@ export default function App() {
     const isSunday = date.getDay() === 0;
     
     // 赤帯（日曜日、またはドロップダウンで祝日・店休日を選択したとき）を最優先にする
-    if (gr?.type === "祝日" || gr?.type === "店休日" || isSunday) return "bg-red-100/70";
+    if (gr?.type === "祝日" || gr?.type === "店休日" || isSunday) return "shift-row-holiday";
     
     // 青帯（ドロップダウンで谷川整形休診を選択したときのみ。土曜日は対象外）
-    if (gr?.type === "谷川整形休診") return "bg-blue-100/70";
+    if (gr?.type === "谷川整形休診") return "shift-row-clinic-closed";
     
     return "";
   };
@@ -1311,11 +1314,16 @@ export default function App() {
           全体
         </button>
         <button
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isLocked ? "text-red-600" : "text-slate-500"}`}
-          onClick={toggleLock}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isFromAdmin && activeTab !== "admin" ? "text-blue-600" : "text-slate-500"}`}
+          onClick={() => requestEditAccess(() => {
+            const firstEmployee = dashboardEmployees[0];
+            if (!firstEmployee) return;
+            setActiveTab(firstEmployee.id);
+            setIsFromAdmin(true);
+          })}
         >
-          {isLocked ? <Users className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
-          {isLocked ? "解除" : "確定"}
+          <PencilLine className="w-5 h-5" />
+          シフト作成
         </button>
         <button
           className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold text-slate-500 relative"
@@ -1555,11 +1563,61 @@ export default function App() {
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy/MM/dd")} - ${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}
                       </CardDescription>
                     </div>
-                    <div className="dashboard-card-meta flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px] font-normal">閲覧専用</Badge>
+                    <div className="dashboard-card-actions flex items-center gap-2">
+                      {isFromAdmin ? (
+                        <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs font-bold"
+                          onClick={() => requestEditAccess(() => setIsFromAdmin(true))}
+                        >
+                          <PencilLine className="w-3.5 h-3.5 mr-1.5" />補足を編集
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
+                    {isFromAdmin && dateRange.length > 0 && (() => {
+                      const targetDate = remarkEditDate && dateRange.some(date => getDateStr(date) === remarkEditDate)
+                        ? remarkEditDate
+                        : getDateStr(dateRange[0]);
+                      const targetRemark = globalRemarks.find(item => item.date === targetDate);
+                      return (
+                        <div className="dashboard-remark-editor">
+                          <div className="dashboard-remark-editor-title"><CalendarDays className="w-4 h-4" />日付の補足・帯色</div>
+                          <Select value={targetDate} onValueChange={setRemarkEditDate}>
+                            <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
+                            <SelectContent className="bg-white border-border shadow-xl z-50">
+                              {dateRange.map(date => {
+                                const value = getDateStr(date);
+                                return <SelectItem key={value} value={value}>{format(date, "M/d（E）", { locale: ja })}</SelectItem>;
+                              })}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={targetRemark?.type || "なし"}
+                            onValueChange={(value) => handleGlobalRemarkTypeChange(targetDate, value as GlobalRemark["type"])}
+                            disabled={isLocked}
+                          >
+                            <SelectTrigger className="h-9 bg-white"><SelectValue placeholder="補足を選択" /></SelectTrigger>
+                            <SelectContent className="bg-white border-border shadow-xl z-50">
+                              {GLOBAL_REMARK_TYPES.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          {(targetRemark?.type === "コメント" || targetRemark?.type === "当番薬局") && (
+                            <Input
+                              className="h-9 bg-white"
+                              placeholder="補足内容"
+                              value={targetRemark?.text || ""}
+                              onChange={(event) => handleGlobalRemarkTextChange(targetDate, event.target.value)}
+                              disabled={isLocked}
+                            />
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="dashboard-table-wrap overflow-x-auto">
                       <Table className="dashboard-table text-[13px]">
                         <TableHeader>
@@ -1567,7 +1625,15 @@ export default function App() {
                             <TableHead className="dashboard-date-col w-16 h-10 font-bold text-muted-foreground border-r border-border">日付</TableHead>
                             <TableHead className="dashboard-day-col w-10 h-10 font-bold text-muted-foreground border-r border-border">曜</TableHead>
                             {dashboardEmployees.map(emp => (
-                              <TableHead key={emp.id} className="dashboard-employee-col font-bold text-muted-foreground border-r border-border min-w-[120px]">{emp.name}</TableHead>
+                              <TableHead key={emp.id} className="dashboard-employee-col font-bold text-muted-foreground border-r border-border min-w-[120px]">
+                                <button
+                                  className="dashboard-employee-link"
+                                  onClick={() => { setActiveTab(emp.id); setIsFromAdmin(false); }}
+                                  title={`${emp.name}さんの個人シフトを見る`}
+                                >
+                                  {emp.name}<ChevronRight className="w-3 h-3" />
+                                </button>
+                              </TableHead>
                             ))}
                             <TableHead className="dashboard-remarks-col font-bold text-muted-foreground min-w-[150px]">備考</TableHead>
                           </TableRow>
@@ -1610,7 +1676,7 @@ export default function App() {
                                     <Select 
                                       value={gr?.type || "なし"} 
                                       onValueChange={(val) => handleGlobalRemarkTypeChange(dateStr, val as GlobalRemark["type"])}
-                                      disabled={isLocked}
+                                      disabled={isLocked || !isFromAdmin}
                                     >
                                       <SelectTrigger className="h-7 text-[10px] bg-white/50">
                                         <SelectValue placeholder="備考種別" />
@@ -1627,7 +1693,7 @@ export default function App() {
                                         placeholder="内容入力..." 
                                         value={gr?.text || ""}
                                         onChange={(e) => handleGlobalRemarkTextChange(dateStr, e.target.value)}
-                                        disabled={isLocked}
+                                        disabled={isLocked || !isFromAdmin}
                                       />
                                     )}
                                   </div>
@@ -1685,6 +1751,23 @@ export default function App() {
                 transition={{ duration: 0.2 }}
                 className="space-y-8"
               >
+                <div className="admin-shift-entry">
+                  <div>
+                    <p>勤務シフトを組む</p>
+                    <span>従業員ごとの勤務・休憩・コメントを編集します</span>
+                  </div>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                    onClick={() => {
+                      const firstEmployee = dashboardEmployees[0];
+                      if (!firstEmployee) return;
+                      setActiveTab(firstEmployee.id);
+                      setIsFromAdmin(true);
+                    }}
+                  >
+                    <PencilLine className="w-4 h-4 mr-2" />シフト作成画面を開く
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 gap-6">
                   <Card className="border-border shadow-sm">
                     <CardHeader className="py-4 border-b border-border bg-slate-50/50 rounded-t-xl">
@@ -1938,6 +2021,24 @@ export default function App() {
                         </div>
                       </CardHeader>
                       <CardContent className="p-0">
+                        {isFromAdmin && (
+                          <div className="mobile-employee-picker">
+                            <span>編集する人</span>
+                            <Select value={emp.id} onValueChange={setActiveTab}>
+                              <SelectTrigger className="h-9 bg-white"><SelectValue /></SelectTrigger>
+                              <SelectContent className="bg-white border-border shadow-xl z-50">
+                                {dashboardEmployees.map(employee => <SelectItem key={employee.id} value={employee.id}>{employee.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant={isLocked ? "outline" : "default"}
+                              className="h-9 font-bold"
+                              onClick={toggleLock}
+                            >
+                              {isLocked ? "確定を解除" : "この月を確定"}
+                            </Button>
+                          </div>
+                        )}
                         <div className="overflow-x-auto">
                           <Table className="text-[13px]">
                             <TableHeader>
@@ -2129,7 +2230,7 @@ export default function App() {
             <Input
               value={editorName}
               onChange={(e) => setEditorName(e.target.value)}
-              placeholder="編集者名（例：藤川）"
+              placeholder="編集者名（例：降旗）"
               className="h-10 text-sm"
             />
             <Input
@@ -2140,6 +2241,7 @@ export default function App() {
               placeholder="パスワードを入力"
               className="h-10 text-sm"
             />
+            <p className="text-[11px] text-slate-500">初期パスワード：aoi-kanri-2026</p>
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"

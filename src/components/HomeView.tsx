@@ -55,6 +55,13 @@ export function HomeView({
 
   return (
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
+      <header className="home-brand-header">
+        <img src="/shift-kanri-tool/icon-192.png" alt="" />
+        <div>
+          <span>PHARMACY SHIFT</span>
+          <h1>薬局シフト</h1>
+        </div>
+      </header>
       <div className="home-toolbar">
         <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /> 前週</Button>
         <div className="text-center">

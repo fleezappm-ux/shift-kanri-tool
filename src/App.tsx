@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
-import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +49,7 @@ import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns }
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer } from "./lib/shift-sync";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
+import { HomeView } from "./components/HomeView";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -152,12 +152,14 @@ export default function App() {
     return DEFAULT_CYCLE_PATTERNS;
   });
   const [syncState, setSyncState] = useState<"loading" | "saved" | "dirty" | "saving" | "offline">("loading");
+  const [heatmapEnabled, setHeatmapEnabled] = useState(() => localStorage.getItem("heatmap_enabled") === "true");
 
   // 編集モード（従業員マスター・個別シート編集・アプリ詳細設定）へ入るための簡易パスワードゲート。
   // ブラウザのタブ/セッションを閉じるまで有効です（sessionStorageに保存）。
   const [hasEditAccess, setHasEditAccess] = useState(() => sessionStorage.getItem("edit_access") === "granted");
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
+  const [editorName, setEditorName] = useState(() => sessionStorage.getItem("editor_name") || "");
   const pendingEditActionRef = useRef<(() => void) | null>(null);
 
   const requestEditAccess = (action: () => void) => {
@@ -180,9 +182,14 @@ export default function App() {
   }, []);
 
   const submitEditPassword = () => {
+    if (!editorName.trim()) {
+      toast.error("編集者名を入力してください");
+      return;
+    }
     if (passwordInput === EDITOR_PASSWORD) {
       setHasEditAccess(true);
       sessionStorage.setItem("edit_access", "granted");
+      sessionStorage.setItem("editor_name", editorName.trim());
       setShowPasswordModal(false);
       const action = pendingEditActionRef.current;
       pendingEditActionRef.current = null;
@@ -265,6 +272,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("cycle_patterns", JSON.stringify(cyclePatterns));
   }, [cyclePatterns]);
+
+  useEffect(() => {
+    localStorage.setItem("heatmap_enabled", String(heatmapEnabled));
+  }, [heatmapEnabled]);
 
 
   useEffect(() => {
@@ -394,12 +405,20 @@ export default function App() {
 
   const saveCurrentMonth = async () => {
     if (syncState === "saving" || dateRange.length === 0) return;
+    const savingEditor = editorName.trim() || window.prompt("Notionへ保存する人の名前を入力してください")?.trim() || "";
+    if (!savingEditor) {
+      toast.error("保存者名が必要です");
+      return;
+    }
+    setEditorName(savingEditor);
+    sessionStorage.setItem("editor_name", savingEditor);
     setSyncState("saving");
     try {
       const result = await saveMonthToServer(
         employees,
         getDateStr(dateRange[0]),
-        getDateStr(dateRange[dateRange.length - 1])
+        getDateStr(dateRange[dateRange.length - 1]),
+        savingEditor
       );
       setSyncState("saved");
       toast.success(`${format(currentMonth, "yyyy年MM月")}をNotionへ保存しました（新規${result.created}・更新${result.updated}）`);
@@ -594,6 +613,39 @@ export default function App() {
     toast.success(`${cycleNames[cycleType]}を適用しました`);
   };
 
+  const reapplyCycleToCurrentMonth = (cycleType: number) => {
+    if (isLocked) {
+      toast.error("この月は確定済みです。確定解除してから再適用してください");
+      return;
+    }
+    const targets = employees.filter(emp => cycleAssignments[emp.id]?.cycleType === cycleType);
+    if (!targets.length) {
+      toast.info(`現在${cycleNames[cycleType]}が割り当てられている従業員はいません`);
+      return;
+    }
+    if (!window.confirm(`${cycleNames[cycleType]}を${targets.length}名の今月分へ再適用します。手入力した勤務時間も上書きされます。よろしいですか？`)) return;
+
+    setEmployees(prev => prev.map(emp => {
+      const assignment = cycleAssignments[emp.id];
+      if (!assignment || assignment.cycleType !== cycleType) return emp;
+      const newShifts = [...emp.shifts];
+      dateRange.forEach(date => {
+        const dateStr = getDateStr(date);
+        const shift = getCycleShift(date, cycleType, assignment.anchorDate);
+        if (!shift) return;
+        const { breakTime, workTime } = calculateTimes(shift);
+        const index = newShifts.findIndex(item => item.date === dateStr);
+        if (index >= 0) {
+          newShifts[index] = { ...newShifts[index], shift, breakTime, workTime, customShiftText: undefined };
+        } else {
+          newShifts.push({ date: dateStr, shift, breakTime, workTime, comment: "" });
+        }
+      });
+      return { ...emp, shifts: newShifts };
+    }));
+    toast.success(`${cycleNames[cycleType]}を今月分へ再適用しました`);
+  };
+
   const handleCommentChange = (employeeId: string, date: string, comment: string) => {
     if (isLocked) return;
     setEmployees(prev => prev.map(emp => {
@@ -712,13 +764,14 @@ export default function App() {
   };
 
   const downloadExcel = async () => {
+    const ExcelJS = await import("exceljs");
     const workbook = new ExcelJS.Workbook();
-    const borderStyle: Partial<ExcelJS.Borders> = {
+    const borderStyle = {
       top: { style: 'thin' },
       left: { style: 'thin' },
       bottom: { style: 'thin' },
       right: { style: 'thin' }
-    };
+    } as const;
 
     // 1. 全体シフトシートの作成
     const overallSheet = workbook.addWorksheet("全体シフト");
@@ -1416,117 +1469,20 @@ export default function App() {
         <div className="flex-1 overflow-y-auto min-h-0 pt-2">
           <AnimatePresence mode="wait">
             {activeTab === "home" ? (
-              <motion.div
-                key="home"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="space-y-6"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
-                    <Button variant="ghost" size="sm" className="h-9 px-3 rounded-lg" onClick={() => setHomeWeekOffset(w => w - 1)}>
-                      <ChevronLeft className="w-4 h-4" />
-                    </Button>
-                    <span className="px-3 text-sm font-bold text-slate-700">
-                      {format(homeWeekDates[0], "M月d日")} 〜 {format(homeWeekDates[6], "M月d日")}
-                    </span>
-                    <Button variant="ghost" size="sm" className="h-9 px-3 rounded-lg" onClick={() => setHomeWeekOffset(w => w + 1)}>
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                    {homeWeekOffset !== 0 && (
-                      <Button variant="ghost" size="sm" className="h-9 px-2 text-xs" onClick={() => setHomeWeekOffset(0)}>
-                        今週
-                      </Button>
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-9 text-xs"
-                    onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
-                  >
-                    全体表示 <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-                  {homeWeekDates.map(date => {
-                    const dateStr = getDateStr(date);
-                    const isToday = dateStr === todayStr;
-                    const isSelected = dateStr === homeSelectedDateStr;
-                    const remark = getGlobalRemark(date);
-                    const working = employees
-                      .map(emp => ({ emp, shift: emp.shifts.find(s => s.date === dateStr) }))
-                      .filter(({ shift }) => shift?.shift && shift.shift !== "休み");
-                    return (
-                      <button
-                        key={dateStr}
-                        onClick={() => setHomeSelectedDate(dateStr)}
-                        className={`text-left rounded-xl border p-3 transition-all ${isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"} ${isToday ? "ring-1 ring-blue-300" : ""}`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] font-bold text-slate-500">{format(date, "M/d")}（{["日", "月", "火", "水", "木", "金", "土"][date.getDay()]}）</span>
-                          {remark && remark.type !== "コメント" && (
-                            <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-red-200 text-red-600">{remark.type}</Badge>
-                          )}
-                        </div>
-                        <div className="space-y-1 min-h-[40px]">
-                          {working.length === 0 ? (
-                            <span className="text-[10px] text-muted-foreground">予定なし</span>
-                          ) : working.map(({ emp }) => (
-                            <div key={emp.id} className="text-[11px] leading-tight">
-                              {emp.role && <span className="text-slate-400 mr-1">{emp.role}</span>}
-                              <span className="font-semibold text-slate-700">{emp.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <Card className="border-border shadow-sm">
-                  <CardHeader className="py-4 border-b border-border">
-                    <CardTitle className="text-sm">
-                      {format(new Date(homeSelectedDateStr), "M月d日")}（{["日", "月", "火", "水", "木", "金", "土"][new Date(homeSelectedDateStr).getDay()]}）の詳細
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <div className="space-y-2">
-                      {employees.map(emp => {
-                        const shift = emp.shifts.find(s => s.date === homeSelectedDateStr);
-                        const label = shift?.shift === "任意入力" ? (shift.customShiftText || "") : (shift?.shift || "");
-                        return (
-                          <div key={emp.id} className="flex items-center justify-between text-xs border-b border-slate-100 last:border-0 py-2">
-                            <div className="flex items-center gap-2">
-                              {emp.role && <Badge variant="outline" className="text-[9px] px-1.5">{emp.role}</Badge>}
-                              <span
-                                className="font-semibold text-slate-700 cursor-pointer hover:underline"
-                                onClick={() => { setActiveTab(emp.id); setIsFromAdmin(false); }}
-                                title="この従業員の全体シフトを見る"
-                              >
-                                {emp.name}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3 text-slate-500">
-                              <span className={!label ? "text-muted-foreground" : ""}>{label || "未入力"}</span>
-                              {shift && shift.shift && shift.shift !== "休み" && shift.shift !== "有給" && (
-                                <>
-                                  <span>休憩 {shift.breakTime}</span>
-                                  <span>実働 {shift.workTime}</span>
-                                </>
-                              )}
-                              {shift?.comment && <span className="italic text-slate-400">{shift.comment}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <HomeView
+                employees={employees}
+                remarks={globalRemarks}
+                weekDates={homeWeekDates}
+                selectedDate={homeSelectedDateStr}
+                today={todayStr}
+                weekOffset={homeWeekOffset}
+                heatmapEnabled={heatmapEnabled}
+                monthDates={dateRange}
+                onWeekOffsetChange={setHomeWeekOffset}
+                onDateSelect={setHomeSelectedDate}
+                onShowDashboard={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
+                onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
+              />
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
@@ -1764,20 +1720,30 @@ export default function App() {
                             <div key={num} className="border border-slate-200 rounded-xl p-4 bg-white">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-xs font-bold text-slate-700">{num}. {cycleNames[num]}</span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-[10px] px-2"
-                                  onClick={() => {
-                                    setCyclePatterns(prev => {
-                                      const pattern = prev[num].map(entry => ({ ...entry, week2: entry.week1 }));
-                                      return { ...prev, [num]: pattern };
-                                    });
-                                    toast.success("週1の内容を週2にコピーしました");
-                                  }}
-                                >
-                                  週1を週2にコピー
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] px-2"
+                                    onClick={() => reapplyCycleToCurrentMonth(num)}
+                                  >
+                                    この変更を今月に適用
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-[10px] px-2"
+                                    onClick={() => {
+                                      setCyclePatterns(prev => {
+                                        const pattern = prev[num].map(entry => ({ ...entry, week2: entry.week1 }));
+                                        return { ...prev, [num]: pattern };
+                                      });
+                                      toast.success("週1の内容を週2にコピーしました");
+                                    }}
+                                  >
+                                    週1を週2にコピー
+                                  </Button>
+                                </div>
                               </div>
                               {(["week1", "week2"] as const).map(weekKey => (
                                 <div key={weekKey} className="grid grid-cols-7 gap-1.5 mb-1.5">
@@ -1813,6 +1779,24 @@ export default function App() {
                               </p>
                             </div>
                           ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-slate-100">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">月間人員配置ヒートマップ</h4>
+                            <p className="text-[10px] text-muted-foreground mt-1">ホーム画面に日ごとの出勤人数を色分け表示します（初期設定はOFF）</p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant={heatmapEnabled ? "default" : "outline"}
+                            size="sm"
+                            className="h-9 min-w-20 text-xs"
+                            onClick={() => setHeatmapEnabled(value => !value)}
+                          >
+                            {heatmapEnabled ? "ON" : "OFF"}
+                          </Button>
                         </div>
                       </div>
 
@@ -2109,8 +2093,13 @@ export default function App() {
               管理薬剤師・SE兼任管理薬剤師・開設者のみ入力してください。
             </p>
             <Input
+              value={editorName}
+              onChange={(e) => setEditorName(e.target.value)}
+              placeholder="編集者名（例：藤川）"
+              className="h-10 text-sm"
+            />
+            <Input
               type="password"
-              autoFocus
               value={passwordInput}
               onChange={(e) => setPasswordInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submitEditPassword(); }}
@@ -2121,7 +2110,7 @@ export default function App() {
               <Button
                 variant="outline"
                 className="h-9 text-xs"
-                onClick={() => { setShowPasswordModal(false); pendingEditActionRef.current = null; setPasswordInput(""); }}
+              onClick={() => { setShowPasswordModal(false); pendingEditActionRef.current = null; setPasswordInput(""); }}
               >
                 キャンセル
               </Button>

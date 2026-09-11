@@ -127,7 +127,8 @@ export async function fetchHolidaysFromServer(startDate: string, endDate: string
 export async function saveMonthToServer(
   employees: Employee[],
   periodStart: string,
-  periodEnd: string
+  periodEnd: string,
+  updatedBy?: string
 ): Promise<{ created: number; updated: number; cleared: number }> {
   const shifts = employees.flatMap(employee => {
     const shiftsByDate = new Map(employee.shifts.map(shift => [shift.date.slice(0, 10), shift]));
@@ -151,7 +152,7 @@ export async function saveMonthToServer(
     return rows;
   });
 
-  const json = await callGas("saveShiftMonth", { periodStart, periodEnd, shifts });
+  const json = await callGas("saveShiftMonth", { periodStart, periodEnd, updatedBy: updatedBy || "", shifts });
   return {
     created: Number(json.created || 0),
     updated: Number(json.updated || 0),

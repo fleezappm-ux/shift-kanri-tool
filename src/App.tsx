@@ -222,6 +222,7 @@ export default function App() {
   // 取得できた場合はそちらを優先し、取得できない場合（オフライン等）はlocalStorageの内容のまま使います。
   const syncReadyRef = useRef(false);
   const skipDirtyRef = useRef(false);
+  const skipRemarkDirtyRef = useRef(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -229,7 +230,9 @@ export default function App() {
       if (!cancelled) {
         if (merged) {
           skipDirtyRef.current = true;
-          setEmployees(merged);
+          skipRemarkDirtyRef.current = true;
+          setEmployees(merged.employees);
+          setGlobalRemarks(merged.globalRemarks);
         }
         syncReadyRef.current = true;
         setSyncState(merged ? "saved" : "offline");
@@ -258,6 +261,12 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("global_remarks", JSON.stringify(globalRemarks));
+    if (!syncReadyRef.current) return;
+    if (skipRemarkDirtyRef.current) {
+      skipRemarkDirtyRef.current = false;
+      return;
+    }
+    setSyncState("dirty");
   }, [globalRemarks]);
 
   useEffect(() => {
@@ -420,6 +429,7 @@ export default function App() {
     try {
       const result = await saveMonthToServer(
         employees,
+        globalRemarks,
         getDateStr(dateRange[0]),
         getDateStr(dateRange[dateRange.length - 1]),
         savingEditor

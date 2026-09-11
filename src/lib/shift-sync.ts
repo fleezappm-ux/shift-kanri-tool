@@ -1,4 +1,4 @@
-import { Employee, DayShift, ShiftType } from "../types";
+import { Employee, DayShift, ShiftType, GlobalRemark } from "../types";
 import { SHIFT_OPTIONS } from "../constants";
 
 // ファーマシーOSのGAS（Web App）のURL。デプロイし直してもURLは変わらない想定。
@@ -15,6 +15,13 @@ interface ShiftRow {
   "休憩時間"?: string;
   "実働時間"?: string;
   "備考"?: string;
+  "全体補足種別"?: string;
+  "全体補足内容"?: string;
+}
+
+export interface ShiftFetchResult {
+  employees: Employee[];
+  globalRemarks: GlobalRemark[];
 }
 
 async function callGas(action: string, extra: Record<string, unknown> = {}): Promise<any> {
@@ -52,7 +59,7 @@ function buildShiftContent(shift: ShiftType, customShiftText?: string): string {
  * サーバー（Notionのシフト管理DB）から全件取得し、Employee[] の形に組み立てます。
  * 取得できない場合（オフライン・未設定など）は null を返します（呼び出し側でlocalStorageにフォールバック）。
  */
-export async function fetchShiftsFromServer(existingEmployees: Employee[]): Promise<Employee[] | null> {
+export async function fetchShiftsFromServer(existingEmployees: Employee[]): Promise<ShiftFetchResult | null> {
   try {
     const json = await callGas("getShifts");
     const rows: ShiftRow[] = json.shifts || [];
@@ -99,7 +106,20 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
       emp.shifts.push(dayShift);
     });
 
-    return Array.from(byName.values());
+    const allowedRemarkTypes = new Set(["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント"]);
+    const remarksByDate = new Map<string, GlobalRemark>();
+    rows.forEach(row => {
+      const date = row["日付"]?.start?.slice(0, 10) || "";
+      const type = row["全体補足種別"] || "";
+      if (!date || !allowedRemarkTypes.has(type) || remarksByDate.has(date)) return;
+      remarksByDate.set(date, {
+        date,
+        type: type as GlobalRemark["type"],
+        text: row["全体補足内容"] || ""
+      });
+    });
+
+    return { employees: Array.from(byName.values()), globalRemarks: Array.from(remarksByDate.values()) };
   } catch (error) {
     console.error("シフトのサーバー取得に失敗しました（オフラインの可能性）:", error);
     return null;
@@ -126,6 +146,7 @@ export async function fetchHolidaysFromServer(startDate: string, endDate: string
  */
 export async function saveMonthToServer(
   employees: Employee[],
+  globalRemarks: GlobalRemark[],
   periodStart: string,
   periodEnd: string,
   updatedBy?: string
@@ -145,7 +166,9 @@ export async function saveMonthToServer(
         "シフト内容": dayShift ? buildShiftContent(dayShift.shift, dayShift.customShiftText) : "",
         "休憩時間": dayShift?.breakTime || "",
         "実働時間": dayShift?.workTime || "",
-        "備考": dayShift?.comment || ""
+        "備考": dayShift?.comment || "",
+        "全体補足種別": globalRemarks.find(remark => remark.date === date)?.type || "",
+        "全体補足内容": globalRemarks.find(remark => remark.date === date)?.text || ""
       });
       cursor.setDate(cursor.getDate() + 1);
     }

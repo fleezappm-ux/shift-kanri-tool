@@ -296,7 +296,7 @@ export default function App() {
         if (remark?.type !== "祝日" && remark?.type !== "店休日") return total;
         return total + employees.filter(emp => {
           const shift = emp.shifts.find(s => s.date === getDateStr(date))?.shift;
-          return Boolean(shift && shift !== "休み" && shift !== "有給");
+          return Boolean(shift && shift !== "休み" && shift !== "有休");
         }).length;
       }, 0);
       if (conflicts > 0) toast.warning(`店休日・祝日に勤務が${conflicts}件あります。内容は変更せず確定しました`);
@@ -663,13 +663,13 @@ export default function App() {
     }));
   };
 
-  /** 指定日を、全従業員「休み」にします（既に「休み」「有給」の人は変更しません）。祝日・店休日のデフォルト適用に使います。 */
+  /** 指定日を、全従業員「休み」にします（既に「休み」「有休」の人は変更しません）。祝日・店休日のデフォルト適用に使います。 */
   const setAllEmployeesOff = (dateStr: string) => {
     setEmployees(prev => prev.map(emp => {
       const idx = emp.shifts.findIndex(s => s.date === dateStr);
       if (idx >= 0) {
         const currentShift = emp.shifts[idx].shift;
-        if (currentShift === "休み" || currentShift === "有給") return emp;
+        if (currentShift === "休み" || currentShift === "有休") return emp;
         const newShifts = [...emp.shifts];
         newShifts[idx] = { ...newShifts[idx], shift: "休み", customShiftText: undefined, breakTime: "0:00", workTime: "0:00" };
         return { ...emp, shifts: newShifts };
@@ -876,18 +876,18 @@ export default function App() {
     
     const attendanceData = ["出勤日数合計"];
     const workHoursData = ["実働時間合計"];
-    const paidLeaveData = ["有給日数合計"];
+    const paidLeaveData = ["有休日数合計"];
 
     employees.forEach(emp => {
       const stats = emp.shifts
         .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
         .reduce((acc, s) => {
-          const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有給";
+          const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有休";
           const [wh, wm] = (s.workTime || "0:00").split(":").map(Number);
           return {
             workHours: acc.workHours + (isNaN(wh) ? 0 : wh + wm/60),
             attendance: acc.attendance + (isWorking ? 1 : 0),
-            paid: acc.paid + (s.shift === "有給" ? 1 : 0)
+            paid: acc.paid + (s.shift === "有休" ? 1 : 0)
           };
         }, { workHours: 0, attendance: 0, paid: 0 });
 
@@ -1003,14 +1003,14 @@ export default function App() {
       const stats = emp.shifts
         .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
         .reduce((acc, s) => {
-          const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有給";
+          const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有休";
           const [wh, wm] = (s.workTime || "0:00").split(":").map(Number);
           const [bh, bm] = (s.breakTime || "0:00").split(":").map(Number);
           return {
             workHours: acc.workHours + (isNaN(wh) ? 0 : wh + wm/60),
             breakHours: acc.breakHours + (isNaN(bh) ? 0 : bh + bm/60),
             attendance: acc.attendance + (isWorking ? 1 : 0),
-            paid: acc.paid + (s.shift === "有給" ? 1 : 0)
+            paid: acc.paid + (s.shift === "有休" ? 1 : 0)
           };
         }, { workHours: 0, breakHours: 0, attendance: 0, paid: 0 });
 
@@ -1031,7 +1031,7 @@ export default function App() {
       const detailRow = empSheet.addRow([
         "出勤日数",
         `${stats.attendance}日`,
-        "有給日数",
+        "有休日数",
         `${stats.paid}日`,
         ""
       ]);
@@ -1086,11 +1086,11 @@ export default function App() {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="shift-shell flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
       {/* Sidebar */}
-      <aside className="shift-sidebar w-64 bg-card border-r border-border p-6 flex flex-col shrink-0 overflow-y-auto">
+      <aside className="shift-sidebar hidden md:flex w-64 bg-card border-r border-border p-6 flex-col shrink-0 overflow-y-auto">
         <div className="text-xl font-bold text-primary mb-8 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <img src="/shift-kanri-tool/shift-ai-logo.png" alt="" className="w-10 h-10 object-contain" />
-            <div className="leading-tight"><span className="block text-base">シフト管理</span><span className="block text-[10px] font-medium opacity-60 mt-1">PHARMACY SHIFT AI</span></div>
+            <img src="/shift-kanri-tool/icon-192.png" alt="" className="w-10 h-10 object-contain rounded-xl" />
+            <div className="leading-tight"><span className="block text-base">シフト管理</span><span className="block text-[10px] font-medium opacity-60 mt-1">PHARMACY SHIFT</span></div>
           </div>
           <div className="relative">
             <Button
@@ -1297,8 +1297,49 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Mobile bottom bar (PCはサイドバーのまま) */}
+      <nav className="shift-bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex items-stretch">
+        <button
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "home" && !isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
+          onClick={() => { setActiveTab("home"); setIsFromAdmin(false); }}
+        >
+          <Home className="w-5 h-5" />
+          ホーム
+        </button>
+        <button
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "dashboard" && !isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
+          onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
+        >
+          <Grid3X3 className="w-5 h-5" />
+          全体
+        </button>
+        <button
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isLocked ? "text-red-600" : "text-slate-500"}`}
+          onClick={toggleLock}
+        >
+          {isLocked ? <Users className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
+          {isLocked ? "解除" : "確定"}
+        </button>
+        <button
+          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold text-slate-500 relative"
+          onClick={saveCurrentMonth}
+          disabled={syncState === "loading" || syncState === "saving"}
+        >
+          <span className={`sync-dot ${syncState} absolute top-1 right-1/4`} />
+          <CloudUpload className="w-5 h-5" />
+          {syncState === "saving" ? "保存中" : "保存"}
+        </button>
+        <button
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "admin" && isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
+          onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); }); }}
+        >
+          <FileCode className="w-5 h-5" />
+          設定
+        </button>
+      </nav>
+
       {/* Main Content */}
-      <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 gap-6">
+      <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6">
         {activeTab !== "home" && (
         <header className="flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
@@ -1550,7 +1591,7 @@ export default function App() {
                                   return (
                                     <TableCell key={emp.id} className="py-1 px-1 border-r border-border">
                                       <div className={`text-[12px] py-1.5 rounded-sm text-center font-bold leading-none ${
-                                        s?.shift === "有給" 
+                                        s?.shift === "有休" 
                                           ? "bg-red-100 text-red-800 border border-red-200" 
                                           : s?.shift === "休み"
                                             ? ""
@@ -1602,17 +1643,17 @@ export default function App() {
                               const stats = emp.shifts
                                 .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
                                 .reduce((acc, s) => {
-                                  const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有給";
+                                  const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有休";
                                   if (!s.workTime || !s.workTime.includes(":")) {
-                                    return { ...acc, attendance: acc.attendance + (isWorking ? 1 : 0), paid: acc.paid + (s.shift === "有給" ? 1 : 0) };
+                                    return { ...acc, attendance: acc.attendance + (isWorking ? 1 : 0), paid: acc.paid + (s.shift === "有休" ? 1 : 0) };
                                   }
                                   const [h, m] = s.workTime.split(":").map(Number);
                                   if (isNaN(h) || isNaN(m)) {
-                                    return { ...acc, attendance: acc.attendance + (isWorking ? 1 : 0), paid: acc.paid + (s.shift === "有給" ? 1 : 0) };
+                                    return { ...acc, attendance: acc.attendance + (isWorking ? 1 : 0), paid: acc.paid + (s.shift === "有休" ? 1 : 0) };
                                   }
                                   return {
                                     hours: acc.hours + h + m/60,
-                                    paid: acc.paid + (s.shift === "有給" ? 1 : 0),
+                                    paid: acc.paid + (s.shift === "有休" ? 1 : 0),
                                     attendance: acc.attendance + (isWorking ? 1 : 0)
                                   };
                                 }, { hours: 0, paid: 0, attendance: 0 });
@@ -1870,7 +1911,7 @@ export default function App() {
                               {
                                 emp.shifts
                                   .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                  .filter(s => s.shift && s.shift !== "休み" && s.shift !== "有給")
+                                  .filter(s => s.shift && s.shift !== "休み" && s.shift !== "有休")
                                   .length
                               }日
                             </Badge>
@@ -1891,12 +1932,12 @@ export default function App() {
                             </Badge>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold">有給合計</span>
+                            <span className="text-[10px] text-muted-foreground uppercase font-bold">有休合計</span>
                             <Badge variant="secondary" className="bg-red-100 text-red-800 border-red-200 font-bold">
                               {
                                 emp.shifts
                                   .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                  .filter(s => s.shift === "有給")
+                                  .filter(s => s.shift === "有休")
                                   .length
                               }日
                             </Badge>
@@ -1934,7 +1975,7 @@ export default function App() {
                                             onValueChange={(val) => handleShiftChange(emp.id, dateStr, val as ShiftType | "none")}
                                             disabled={isLocked}
                                           >
-                                            <SelectTrigger className={`h-8 text-xs flex-1 ${s?.shift === "有給" ? "bg-red-100 border-red-300 text-red-800" : "bg-white"} ${isLocked ? "opacity-70 cursor-not-allowed" : ""}`}>
+                                            <SelectTrigger className={`h-8 text-xs flex-1 ${s?.shift === "有休" ? "bg-red-100 border-red-300 text-red-800" : "bg-white"} ${isLocked ? "opacity-70 cursor-not-allowed" : ""}`}>
                                               <SelectValue placeholder="選択" />
                                             </SelectTrigger>
                                             <SelectContent className="bg-white border-border shadow-xl z-50">
@@ -2058,13 +2099,13 @@ export default function App() {
                                       <span className="text-slate-700 text-[10px]">{
                                         emp.shifts
                                           .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                          .filter(s => s.shift && s.shift !== "休み" && s.shift !== "有給")
+                                          .filter(s => s.shift && s.shift !== "休み" && s.shift !== "有休")
                                           .length
                                       }日</span>
                                       <span className="text-red-700 text-[10px]">{
                                         emp.shifts
                                           .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                          .filter(s => s.shift === "有給")
+                                          .filter(s => s.shift === "有休")
                                           .length
                                       }日(有)</span>
                                     </div>

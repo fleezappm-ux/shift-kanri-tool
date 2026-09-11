@@ -8,7 +8,7 @@ export const SHIFT_OPTIONS: ShiftType[] = [
   "8:30～16:30",
   "9:30～13:30",
   "9:00～13:00",
-  "有給",
+  "有休",
   "休み",
   "任意入力"
 ];
@@ -124,8 +124,8 @@ export const SPREADSHEET_LAYOUT = `
 `;
 
 export const SPREADSHEET_FORMULAS = {
-  breakTime: '=IF(OR(C2="有給", C2="休み", C2=""), "0:00", IF(VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60) > 6, "1:00", "0:00"))',
-  workTime: '=IF(OR(C2="有給", C2="休み", C2=""), "0:00", (VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60)) - VALUE(LEFT(D2, 1)) - VALUE(MID(D2, 3, 2))/60)'
+  breakTime: '=IF(OR(C2="有休", C2="休み", C2=""), "0:00", IF(VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60) > 6, "1:00", "0:00"))',
+  workTime: '=IF(OR(C2="有休", C2="休み", C2=""), "0:00", (VALUE(LEFT(RIGHT(C2, 5), 2)) + VALUE(RIGHT(C2, 2))/60 - (VALUE(LEFT(C2, FIND("～", C2)-1)) + VALUE(MID(C2, FIND(":", C2)+1, 2))/60)) - VALUE(LEFT(D2, 1)) - VALUE(MID(D2, 3, 2))/60)'
 };
 
 // 編集モード（従業員マスター編集・個別シート編集・アプリ詳細設定）に入るための共通パスワード。

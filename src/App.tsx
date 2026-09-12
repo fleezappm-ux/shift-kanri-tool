@@ -1334,9 +1334,7 @@ export default function App() {
         <button
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isFromAdmin && activeTab !== "admin" ? "text-blue-600" : "text-slate-500"}`}
           onClick={() => requestEditAccess(() => {
-            const firstEmployee = dashboardEmployees[0];
-            if (!firstEmployee) return;
-            setActiveTab(firstEmployee.id);
+            setActiveTab("dashboard");
             setIsFromAdmin(true);
           })}
         >
@@ -1805,9 +1803,7 @@ export default function App() {
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
                     onClick={() => {
-                      const firstEmployee = dashboardEmployees[0];
-                      if (!firstEmployee) return;
-                      setActiveTab(firstEmployee.id);
+                      setActiveTab("dashboard");
                       setIsFromAdmin(true);
                     }}
                   >

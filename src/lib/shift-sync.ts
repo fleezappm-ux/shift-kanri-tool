@@ -32,9 +32,9 @@ export interface ShiftFetchResult {
   supportsGlobalRemarks: boolean;
 }
 
-async function callGas(action: string, extra: Record<string, unknown> = {}): Promise<any> {
+async function callGas(action: string, extra: Record<string, unknown> = {}, requireApiKey = true): Promise<any> {
   const shiftApiKey = localStorage.getItem(SHIFT_API_KEY_STORAGE) || "";
-  if (!shiftApiKey) throw new Error("GAS接続キーが未設定です。設定画面で登録してください。");
+  if (requireApiKey && !shiftApiKey) throw new Error("GAS接続キーが未設定です。設定画面で登録してください。");
   const response = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" }, // GAS doPostはContent-Typeに関わらずpostData.contentsを見るため、プリフライトを避けるtext/plainにしています
@@ -71,7 +71,8 @@ function buildShiftContent(shift: ShiftType, customShiftText?: string): string {
  */
 export async function fetchShiftsFromServer(existingEmployees: Employee[]): Promise<ShiftFetchResult | null> {
   try {
-    const json = await callGas("getShifts");
+    // 閲覧は全端末で利用できる公開API。保存系だけ接続キーを必須にします。
+    const json = await callGas("getShifts", {}, false);
     const rows: ShiftRow[] = json.shifts || [];
 
     const serverNames = new Set<string>();
@@ -143,7 +144,7 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
  */
 export async function fetchHolidaysFromServer(startDate: string, endDate: string): Promise<string[]> {
   try {
-    const json = await callGas("getShiftHolidays", { startDate, endDate });
+    const json = await callGas("getShiftHolidays", { startDate, endDate }, false);
     return Array.isArray(json.holidays) ? json.holidays : [];
   } catch (error) {
     console.error("祝日情報の取得に失敗しました:", error);

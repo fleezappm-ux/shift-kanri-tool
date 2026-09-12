@@ -48,6 +48,13 @@ body { margin:0; background:#f5f7fa; }
 .dashboard-table-wrap { max-height:calc(100vh - 190px); overflow:auto!important; }
 .dashboard-table thead th { position:sticky; top:0; z-index:24; background:#f8fafc!important; box-shadow:0 1px 0 #cbd5e1; }
 .dashboard-table thead .dashboard-date-col { z-index:27; }
+.page-blue-header { color:#fff!important; background:linear-gradient(135deg,#0757c7 0%,#1374e8 66%,#20a4f3 100%)!important; border-color:rgba(255,255,255,.18)!important; }
+.page-blue-header [data-slot="card-title"],.page-blue-header [data-slot="card-description"],.page-blue-header svg { color:#fff!important; }
+.page-blue-header [data-slot="card-description"] { opacity:.82; }
+.page-blue-header .employee-stats>div { background:rgba(255,255,255,.14)!important; }
+.page-blue-header .employee-stats span { color:#fff!important; }
+.page-blue-header .employee-stats [data-slot="badge"] { background:#fff!important; color:#164e9b!important; border-color:rgba(255,255,255,.3)!important; }
+.mobile-cycle-notice { display:none; }
 .admin-shift-entry { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; color:#fff; border-radius:16px; background:linear-gradient(135deg,#0f4fb8,#1677e8); box-shadow:0 12px 28px rgba(15,79,184,.18); }
 .admin-shift-entry p { margin:0 0 3px; font-size:16px; font-weight:900; }
 .admin-shift-entry span { font-size:12px; opacity:.82; }
@@ -149,6 +156,9 @@ body { margin:0; background:#f5f7fa; }
   .mobile-employee-picker{display:grid;grid-template-columns:74px 1fr;align-items:center;gap:8px;padding:10px;background:#eff6ff;border-bottom:1px solid #bfdbfe}
   .mobile-employee-picker>span{color:#1e40af;font-size:12px;font-weight:800}
   .mobile-employee-picker>button{grid-column:1/-1}
+  .desktop-cycle-editor{display:none!important}
+  .mobile-cycle-notice{display:flex;flex-direction:column;gap:5px;margin-top:6px;padding:14px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;color:#1e3a8a}
+  .mobile-cycle-notice strong{font-size:13px}.mobile-cycle-notice span{font-size:11px;line-height:1.55;color:#475569}
   .employee-card-header{display:block!important;padding:14px 13px!important}
   .employee-card-header>div:first-child{margin-bottom:12px}
   .employee-card-header input{max-width:none!important;width:100%!important}

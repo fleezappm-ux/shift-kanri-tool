@@ -93,9 +93,8 @@ export default function App() {
     const saved = localStorage.getItem("current_month");
     return saved ? new Date(saved) : new Date();
   });
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem("active_tab") || "home";
-  });
+  // 起動時は、前回閉じた画面に関係なく必ずホームから開始します。
+  const [activeTab, setActiveTab] = useState("home");
   const [lockedMonths, setLockedMonths] = useState<string[]>(() => {
     const saved = localStorage.getItem("locked_months");
     if (saved) {
@@ -111,10 +110,7 @@ export default function App() {
     return localStorage.getItem("dashboard_title") || "全体シフト集約";
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [isFromAdmin, setIsFromAdmin] = useState(() => {
-    const savedActiveTab = localStorage.getItem("active_tab");
-    return savedActiveTab === "admin";
-  });
+  const [isFromAdmin, setIsFromAdmin] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
   const [cycleNames, setCycleNames] = useState<Record<number, string>>(() => {
@@ -236,7 +232,12 @@ export default function App() {
           // GAS更新前のDBには全体補足プロパティがないため、その間は端末内の既存補足を消さない。
           if (merged.supportsGlobalRemarks) {
             skipRemarkDirtyRef.current = true;
-            setGlobalRemarks(merged.globalRemarks);
+            // 祝日取得とNotion読込が同時に終わっても、先に取得できた自動祝日を消さない。
+            setGlobalRemarks(previous => {
+              const combined = new Map(previous.filter(item => item.type === "祝日").map(item => [item.date, item]));
+              merged.globalRemarks.forEach(item => combined.set(item.date, item));
+              return Array.from(combined.values());
+            });
           }
         }
         syncReadyRef.current = true;
@@ -1554,7 +1555,7 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Card className="dashboard-card border-border shadow-none">
-                  <CardHeader className="dashboard-card-header py-4 border-b border-border flex flex-row items-center justify-between">
+                  <CardHeader className="dashboard-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 group">
                         {isEditingTitle ? (
@@ -1812,7 +1813,7 @@ export default function App() {
                 </div>
                 <div className="grid grid-cols-1 gap-6">
                   <Card className="border-border shadow-sm">
-                    <CardHeader className="py-4 border-b border-border bg-slate-50/50 rounded-t-xl">
+                    <CardHeader className="settings-card-header page-blue-header py-4 border-b border-border rounded-t-xl">
                       <CardTitle className="text-base flex items-center gap-2">
                         <Users className="w-4 h-4 text-primary" />
                         基本設定
@@ -1853,7 +1854,12 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="pt-6 border-t border-slate-100">
+                      <div className="mobile-cycle-notice">
+                        <strong>クール内容の変更はPC版で行ってください</strong>
+                        <span>曜日ごとの勤務時間は項目数が多いため、スマホでは誤操作防止のため非表示にしています。</span>
+                      </div>
+
+                      <div className="desktop-cycle-editor pt-6 border-t border-slate-100">
                         <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">クール名のカスタマイズ</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {[1, 2, 3, 4, 5, 6, 7].map(num => (
@@ -1870,7 +1876,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="pt-6 border-t border-slate-100">
+                      <div className="desktop-cycle-editor pt-6 border-t border-slate-100">
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">クール内容の編集（曜日ごとの勤務時間）</h4>
                         </div>
@@ -2044,7 +2050,7 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                   >
                     <Card className="employee-shift-card border-border shadow-none">
-                      <CardHeader className="employee-card-header py-4 border-b border-border flex flex-row items-center justify-between">
+                      <CardHeader className="employee-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2 group">
                             {isFromAdmin ? (

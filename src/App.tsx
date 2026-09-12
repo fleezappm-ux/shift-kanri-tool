@@ -1631,7 +1631,25 @@ export default function App() {
                         </div>
                       );
                     })()}
-                    <div className="dashboard-mobile-person-jump">
+                    {isFromAdmin && (
+                      <div className="dashboard-mobile-edit-hub">
+                        <div>
+                          <strong>全体編集</strong>
+                          <span>編集する人を選択</span>
+                        </div>
+                        <div className="dashboard-mobile-edit-people">
+                          {dashboardEmployees.map(employee => (
+                            <button
+                              key={employee.id}
+                              onClick={() => { setActiveTab(employee.id); setIsFromAdmin(true); }}
+                            >
+                              {employee.name}<ChevronRight className="w-4 h-4" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!isFromAdmin && <div className="dashboard-mobile-person-jump">
                       <label htmlFor="dashboard-person-jump">個人シフトを見る</label>
                       <select
                         id="dashboard-person-jump"
@@ -1645,7 +1663,7 @@ export default function App() {
                         <option value="">名前を選択</option>
                         {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
                       </select>
-                    </div>
+                    </div>}
                     <div className="dashboard-table-wrap overflow-x-auto">
                       <Table className="dashboard-table text-[13px]">
                         <TableHeader>
@@ -2099,8 +2117,8 @@ export default function App() {
                             >
                               {isLocked ? "確定を解除" : "この月を確定"}
                             </Button>
-                            <Button variant="outline" className="h-9 font-bold" onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}>
-                              <Grid3X3 className="w-4 h-4 mr-2" />月の全体シフトを確認
+                            <Button variant="outline" className="h-9 font-bold" onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(true); }}>
+                              <Grid3X3 className="w-4 h-4 mr-2" />全体編集へ戻る
                             </Button>
                           </div>
                         )}

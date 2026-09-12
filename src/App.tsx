@@ -160,6 +160,16 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState("");
   const [editorName, setEditorName] = useState(() => sessionStorage.getItem("editor_name") || "");
   const pendingEditActionRef = useRef<(() => void) | null>(null);
+  const previousNavigationRef = useRef({ tab: "home", admin: false });
+  const currentNavigationRef = useRef({ tab: activeTab, admin: isFromAdmin });
+
+  useEffect(() => {
+    const current = currentNavigationRef.current;
+    if (current.tab !== activeTab || current.admin !== isFromAdmin) {
+      previousNavigationRef.current = current;
+      currentNavigationRef.current = { tab: activeTab, admin: isFromAdmin };
+    }
+  }, [activeTab, isFromAdmin]);
 
   const requestEditAccess = (action: () => void) => {
     if (hasEditAccess) {
@@ -214,6 +224,21 @@ export default function App() {
 
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
+
+  const goHome = () => {
+    const now = new Date();
+    setCurrentMonth(new Date(now.getFullYear(), now.getMonth(), 1));
+    setHomeWeekOffset(0);
+    setHomeSelectedDate(null);
+    setActiveTab("home");
+    setIsFromAdmin(false);
+  };
+
+  const goBack = () => {
+    const previous = previousNavigationRef.current;
+    setActiveTab(previous.tab || "home");
+    setIsFromAdmin(previous.admin && hasEditAccess);
+  };
 
   const getDateStr = (date: Date) => format(date, "yyyy-MM-dd");
 
@@ -408,15 +433,22 @@ export default function App() {
       const serverHolidays = await fetchHolidaysFromServer(start, end);
       const holidays = [...new Set([...localHolidays, ...serverHolidays])];
       if (cancelled || holidays.length === 0) return;
+      // 当番薬局の日は日曜・祝日でも勤務を優先し、既存の勤務時間を休みに上書きしない。
+      const dutyPharmacyDates = new Set(globalRemarks.filter(remark => remark.type === "当番薬局").map(remark => remark.date));
+      const closedHolidays = holidays.filter(date => !dutyPharmacyDates.has(date));
       setGlobalRemarks(prev => {
         const byDate = new Map<string, GlobalRemark>(prev.map(remark => [remark.date, remark]));
-        holidays.forEach(date => byDate.set(date, { date, type: "祝日", text: byDate.get(date)?.text || "" }));
+        holidays.forEach(date => {
+          if (byDate.get(date)?.type !== "当番薬局") {
+            byDate.set(date, { date, type: "祝日", text: byDate.get(date)?.text || "" });
+          }
+        });
         return Array.from(byDate.values());
       });
       // Notionの読込完了後に適用することで、保存済み勤務に上書きされる競合を防ぐ。
       setEmployees(prev => prev.map(emp => {
         const shifts = [...emp.shifts];
-        holidays.forEach(date => {
+        closedHolidays.forEach(date => {
           const index = shifts.findIndex(shift => shift.date.slice(0, 10) === date);
           const offShift: DayShift = { date, shift: "休み", breakTime: "0:00", workTime: "0:00", comment: index >= 0 ? shifts[index].comment : "" };
           if (index >= 0) shifts[index] = { ...shifts[index], ...offShift, customShiftText: undefined };
@@ -1218,8 +1250,7 @@ export default function App() {
                 variant="outline" 
                 className={`w-full justify-start h-12 px-4 text-sm font-semibold transition-all group relative overflow-hidden ${(activeTab === "home" && !isFromAdmin) ? "bg-slate-100 border-slate-300 shadow-inner" : "bg-white hover:bg-slate-50 border-slate-200 shadow-xs"}`}
                 onClick={() => {
-                  setActiveTab("home");
-                  setIsFromAdmin(false);
+                  goHome();
                 }}
               >
                 <div className={`absolute inset-y-0 left-0 w-1 transform -translate-x-full group-hover:translate-x-0 transition-transform ${(activeTab === "home" && !isFromAdmin) ? "bg-blue-500 translate-x-0" : "bg-slate-400"}`} />
@@ -1327,7 +1358,7 @@ export default function App() {
       <nav className="shift-bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex items-stretch">
         <button
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "home" && !isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
-          onClick={() => { setActiveTab("home"); setIsFromAdmin(false); }}
+          onClick={goHome}
         >
           <Home className="w-5 h-5" />
           ホーム
@@ -1372,6 +1403,15 @@ export default function App() {
         {activeTab !== "home" && (
         <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="page-back-button h-9 px-3 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 shadow-xs transition-all"
+              onClick={goBack}
+              title="前のページへ戻る"
+            >
+              <ArrowLeft className="w-4 h-4" /><span>戻る</span>
+            </Button>
             <Button 
               variant="ghost" 
               size="sm" 

@@ -31,3 +31,19 @@ export interface Employee {
   name: string;
   shifts: DayShift[];
 }
+
+export type LeaveRequestType = "有給希望" | "休み希望" | "午前休希望" | "午後休希望" | "希望なし";
+export type LeaveRequestStatus = "申請中" | "承認" | "却下" | "取消";
+
+export interface LeaveRequest {
+  id: string;
+  employeeName: string;
+  date: string;
+  periodStart: string;
+  periodEnd: string;
+  type: LeaveRequestType;
+  comment: string;
+  status: LeaveRequestStatus;
+  submittedAt: string;
+  updatedAt: string;
+}

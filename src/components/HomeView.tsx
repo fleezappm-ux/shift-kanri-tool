@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { ArrowRight, ChevronLeft, ChevronRight, Clock3, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { Employee, GlobalRemark } from "../types";
 import { WorkforceHeatmap } from "./WorkforceHeatmap";
@@ -18,6 +18,7 @@ interface HomeViewProps {
   onDateSelect: (date: string) => void;
   onShowDashboard: () => void;
   onEmployeeSelect: (employeeId: string) => void;
+  onOpenLeaveRequest: () => void;
 }
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -43,7 +44,7 @@ function shiftLabel(employee: Employee, date: string): string {
 
 export function HomeView({
   employees, remarks, weekDates, selectedDate, today, weekOffset, heatmapEnabled, monthDates,
-  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect
+  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest
 }: HomeViewProps) {
   const orderedEmployees = sortEmployeesForDisplay(employees);
   const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
@@ -70,6 +71,10 @@ export function HomeView({
         </div>
         <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
       </div>
+
+      <button className="home-leave-request" onClick={onOpenLeaveRequest}>
+        <CalendarDays className="w-5 h-5" /><div><strong>有給・休み希望を提出</strong><span>希望受付中のシフト案に申請できます</span></div><ArrowRight className="w-5 h-5" />
+      </button>
 
       <div className="home-week-grid">
         {weekDates.map(date => {

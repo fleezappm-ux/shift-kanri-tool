@@ -46,13 +46,17 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 
-import { Employee, DayShift, ShiftType, GlobalRemark } from "./types";
+import { Employee, DayShift, ShiftType, GlobalRemark, LeaveRequest, LeaveRequestStatus, LeaveRequestType } from "./types";
 import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, hasShiftApiKey, saveShiftApiKey } from "./lib/shift-sync";
 import { getJapaneseHolidayDates } from "./lib/japanese-holidays";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
 import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
+import { LeaveRequestView } from "./components/LeaveRequestView";
+import { LeaveRequestManager } from "./components/LeaveRequestManager";
+import { PersonalShiftList } from "./components/PersonalShiftList";
+import { cancelLeaveRequest, fetchLeaveRequests, submitLeaveRequest, updateLeaveRequestStatus } from "./lib/leave-request-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント", "なし"] as const;
@@ -152,6 +156,8 @@ export default function App() {
   });
   const [syncState, setSyncState] = useState<"loading" | "saved" | "dirty" | "saving" | "offline">("loading");
   const [heatmapEnabled, setHeatmapEnabled] = useState(() => localStorage.getItem("heatmap_enabled") === "true");
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [leaveRequestLoading, setLeaveRequestLoading] = useState(false);
 
   // 編集モード（従業員マスター・個別シート編集・アプリ詳細設定）へ入るための簡易パスワードゲート。
   // ブラウザのタブ/セッションを閉じるまで有効です（sessionStorageに保存）。
@@ -400,6 +406,56 @@ export default function App() {
   };
 
   const dateRange = generateDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+
+  useEffect(() => {
+    if (!dateRange.length) return;
+    let cancelled = false;
+    setLeaveRequestLoading(true);
+    fetchLeaveRequests(getDateStr(dateRange[0]), getDateStr(dateRange[dateRange.length - 1]))
+      .then(items => { if (!cancelled) setLeaveRequests(items); })
+      .catch(error => { if (!cancelled) console.error("希望申請の取得に失敗しました", error); })
+      .finally(() => { if (!cancelled) setLeaveRequestLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthKey]);
+
+  const handleLeaveRequestSubmit = async (input: { employeeName: string; date: string; type: LeaveRequestType; comment: string }) => {
+    if (!dateRange.length) return;
+    setLeaveRequestLoading(true);
+    try {
+      const saved = await submitLeaveRequest({ ...input, periodStart: getDateStr(dateRange[0]), periodEnd: getDateStr(dateRange[dateRange.length - 1]) });
+      setLeaveRequests(prev => [...prev.filter(item => item.id !== saved.id && !(item.employeeName === saved.employeeName && item.date === saved.date)), saved]);
+      toast.success(input.type === "希望なし" ? "希望なしで提出しました" : "希望を提出しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "希望を提出できませんでした");
+    } finally { setLeaveRequestLoading(false); }
+  };
+
+  const handleLeaveRequestCancel = async (id: string) => {
+    setLeaveRequestLoading(true);
+    try {
+      const saved = await cancelLeaveRequest(id);
+      setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item));
+      toast.success("希望を取り消しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "取り消せませんでした");
+    } finally { setLeaveRequestLoading(false); }
+  };
+
+  const handleLeaveRequestStatus = async (request: LeaveRequest, status: LeaveRequestStatus) => {
+    setLeaveRequestLoading(true);
+    try {
+      const saved = await updateLeaveRequestStatus(request.id, status);
+      setLeaveRequests(prev => prev.map(item => item.id === saved.id ? saved : item));
+      if (status === "承認" && request.date) {
+        const shift: ShiftType | null = request.type === "有給希望" ? "有休" : request.type === "休み希望" ? "休み" : null;
+        if (shift) handleShiftChange(employees.find(item => item.name === request.employeeName)?.id || "", request.date, shift);
+      }
+      toast.success(status === "承認" ? "承認しました。勤務表を確認してNotionへ保存してください" : "却下しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "状態を更新できませんでした");
+    } finally { setLeaveRequestLoading(false); }
+  };
 
   // ホーム画面用: 今日を含む週（月〜日）を、homeWeekOffset週分ずらして計算します。
   const homeWeekDates: Date[] = (() => {
@@ -1471,7 +1527,7 @@ export default function App() {
             </Button>
           </div>
 
-          <TabsList className="shift-person-tabs bg-muted p-1 rounded-xl border border-border/50 h-auto flex flex-wrap justify-center overflow-visible">
+          <TabsList className={`shift-person-tabs bg-muted p-1 rounded-xl border border-border/50 h-auto flex flex-wrap justify-center overflow-visible ${activeTab === "requests" ? "hidden" : ""}`}>
             <TabsTrigger 
               value="dashboard" 
               className="px-5 py-2 text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all" 
@@ -1489,7 +1545,7 @@ export default function App() {
             ))}
           </TabsList>
 
-          <div className="shift-tab-arrows flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 ml-auto md:ml-0">
+          <div className={`shift-tab-arrows flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 ml-auto md:ml-0 ${activeTab === "requests" ? "hidden" : ""}`}>
             <Button 
               variant="ghost" 
               size="icon" 
@@ -1592,7 +1648,10 @@ export default function App() {
                 onDateSelect={setHomeSelectedDate}
                 onShowDashboard={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
+                onOpenLeaveRequest={() => { setActiveTab("requests"); setIsFromAdmin(false); }}
               />
+            ) : activeTab === "requests" ? (
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
@@ -1628,6 +1687,7 @@ export default function App() {
                       </CardDescription>
                     </div>
                     <div className="dashboard-card-actions flex items-center gap-2">
+                      <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定シフト" : "シフト案"}</Badge>
                       {isFromAdmin ? (
                         <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>
                       ) : (
@@ -1710,6 +1770,7 @@ export default function App() {
                         {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
                       </select>
                     </div>}
+                    {isFromAdmin && <LeaveRequestManager requests={leaveRequests} loading={leaveRequestLoading} onStatusChange={handleLeaveRequestStatus} />}
                     <div className="dashboard-table-wrap overflow-x-auto">
                       <Table className="dashboard-table text-[13px]">
                         <TableHeader>
@@ -1742,10 +1803,11 @@ export default function App() {
                                 <TableCell className="dashboard-day-col py-2 text-muted-foreground border-r border-border">{format(date, "E", { locale: ja })}</TableCell>
                                 {dashboardEmployees.map(emp => {
                                   const s = getShift(emp, date);
+                                  const leaveRequest = leaveRequests.find(item => item.employeeName === emp.name && item.date === dateStr && (item.status === "申請中" || item.status === "承認"));
                                   const shiftText = s?.shift === "任意入力" ? (s?.customShiftText || "任意") : (s?.shift === "休み" ? "" : (s?.shift || "-"));
                                   const compactParts = shiftText.includes("～") ? shiftText.split("～") : [shiftText];
                                   return (
-                                    <TableCell key={emp.id} className="dashboard-employee-cell py-1 px-1 border-r border-border">
+                                    <TableCell key={emp.id} className={`dashboard-employee-cell py-1 px-1 border-r border-border ${leaveRequest ? "has-leave-request" : ""}`} title={leaveRequest ? `${leaveRequest.type}（${leaveRequest.status}）` : undefined}>
                                       <div className={`text-[12px] py-1.5 rounded-sm text-center font-bold leading-none ${
                                         s?.shift === "有休" 
                                           ? "bg-red-100 text-red-800 border border-red-200" 
@@ -1759,6 +1821,7 @@ export default function App() {
                                       }`}>
                                         <span className="dashboard-shift-full">{shiftText}</span>
                                         <span className="dashboard-shift-compact">{compactParts[0]}{compactParts[1] && <><br />{compactParts[1]}</>}</span>
+                                        {leaveRequest && <small className="leave-request-marker">{leaveRequest.type}</small>}
                                       </div>
                                     </TableCell>
                                   );
@@ -2113,6 +2176,7 @@ export default function App() {
                           <CardDescription className="text-xs">シフトの入力と休憩・実働時間の確認</CardDescription>
                         </div>
                         <div className="employee-stats flex items-center gap-4">
+                          <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-muted-foreground uppercase font-bold">出勤日数</span>
                             <Badge variant="secondary" className="bg-slate-50 text-slate-700 border-slate-100 font-bold">
@@ -2171,7 +2235,7 @@ export default function App() {
                             </Button>
                           </div>
                         )}
-                        <div className="employee-shift-table-wrap overflow-x-auto">
+                        {!isFromAdmin ? <PersonalShiftList employee={emp} dates={dateRange} remarks={globalRemarks} /> : <div className="employee-shift-table-wrap overflow-x-auto">
                           <Table className="employee-shift-table text-[13px]">
                             <TableHeader>
                               <TableRow className="bg-muted/30 hover:bg-muted/30">
@@ -2341,7 +2405,7 @@ export default function App() {
                               </TableRow>
                             </TableBody>
                           </Table>
-                        </div>
+                        </div>}
                       </CardContent>
                     </Card>
                   </motion.div>

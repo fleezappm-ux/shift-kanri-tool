@@ -46,6 +46,7 @@ body { margin:0; background:#f5f7fa; }
 .dashboard-mobile-person-jump { display:none; }
 .dashboard-mobile-edit-hub { display:none; }
 .dashboard-table-wrap { max-height:calc(100vh - 190px); overflow:auto!important; }
+.dashboard-table-wrap>[data-slot="table-container"] { overflow:visible!important; }
 .dashboard-table thead th { position:sticky; top:0; z-index:24; background:#f8fafc!important; box-shadow:0 1px 0 #cbd5e1; }
 .dashboard-table thead .dashboard-date-col { z-index:27; }
 .page-blue-header { color:#fff!important; background:linear-gradient(135deg,#0757c7 0%,#1374e8 66%,#20a4f3 100%)!important; border-color:rgba(255,255,255,.18)!important; }

@@ -46,10 +46,11 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 
-import { Employee, ShiftType, GlobalRemark } from "./types";
+import { Employee, DayShift, ShiftType, GlobalRemark } from "./types";
 import { SHIFT_OPTIONS, EDITOR_PASSWORD, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, hasShiftApiKey, saveShiftApiKey } from "./lib/shift-sync";
+import { getJapaneseHolidayDates } from "./lib/japanese-holidays";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
 import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 
@@ -219,6 +220,7 @@ export default function App() {
   // 起動時に、他の端末で保存されたシフトをNotion（ファーマシーOS経由）から読み込みます。
   // 取得できた場合はそちらを優先し、取得できない場合（オフライン等）はlocalStorageの内容のまま使います。
   const syncReadyRef = useRef(false);
+  const [initialSyncComplete, setInitialSyncComplete] = useState(false);
   const skipDirtyRef = useRef(false);
   const skipRemarkDirtyRef = useRef(false);
   useEffect(() => {
@@ -242,6 +244,7 @@ export default function App() {
         }
         syncReadyRef.current = true;
         setSyncState(merged ? "saved" : "offline");
+        setInitialSyncComplete(true);
       }
     })();
     return () => { cancelled = true; };
@@ -396,31 +399,35 @@ export default function App() {
   // 表示中の期間について、日曜・祝日・年末年始をファーマシーOS側の判定ロジックで自動取得し、
   // まだ備考が付いていない日にだけ「祝日」を自動でセットします（既存の備考は上書きしません）。
   useEffect(() => {
-    if (dateRange.length === 0) return;
+    if (!initialSyncComplete || dateRange.length === 0) return;
     let cancelled = false;
     const start = getDateStr(dateRange[0]);
     const end = getDateStr(dateRange[dateRange.length - 1]);
     (async () => {
-      const holidays = await fetchHolidaysFromServer(start, end);
+      const localHolidays = getJapaneseHolidayDates(dateRange[0], dateRange[dateRange.length - 1]);
+      const serverHolidays = await fetchHolidaysFromServer(start, end);
+      const holidays = [...new Set([...localHolidays, ...serverHolidays])];
       if (cancelled || holidays.length === 0) return;
-      const newlyAdded: string[] = [];
       setGlobalRemarks(prev => {
-        const existingDates = new Set(prev.map(r => r.date));
-        const additions: GlobalRemark[] = [];
-        holidays.forEach(d => {
-          if (!existingDates.has(d)) {
-            additions.push({ date: d, type: "祝日", text: "" });
-            newlyAdded.push(d);
-          }
-        });
-        if (additions.length === 0) return prev;
-        return [...prev, ...additions];
+        const byDate = new Map<string, GlobalRemark>(prev.map(remark => [remark.date, remark]));
+        holidays.forEach(date => byDate.set(date, { date, type: "祝日", text: byDate.get(date)?.text || "" }));
+        return Array.from(byDate.values());
       });
-      newlyAdded.forEach(d => setAllEmployeesOff(d));
+      // Notionの読込完了後に適用することで、保存済み勤務に上書きされる競合を防ぐ。
+      setEmployees(prev => prev.map(emp => {
+        const shifts = [...emp.shifts];
+        holidays.forEach(date => {
+          const index = shifts.findIndex(shift => shift.date.slice(0, 10) === date);
+          const offShift: DayShift = { date, shift: "休み", breakTime: "0:00", workTime: "0:00", comment: index >= 0 ? shifts[index].comment : "" };
+          if (index >= 0) shifts[index] = { ...shifts[index], ...offShift, customShiftText: undefined };
+          else shifts.push(offShift);
+        });
+        return { ...emp, shifts };
+      }));
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthKey]);
+  }, [currentMonthKey, initialSyncComplete]);
 
   const saveCurrentMonth = async () => {
     if (syncState === "saving" || dateRange.length === 0) return;

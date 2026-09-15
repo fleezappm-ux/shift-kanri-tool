@@ -148,7 +148,8 @@ export default function App() {
     return [];
   });
   const [dashboardTitle, setDashboardTitle] = useState(() => {
-    return localStorage.getItem("dashboard_title") || "全体シフト集約";
+    const savedTitle = localStorage.getItem("dashboard_title");
+    return !savedTitle || savedTitle === "全体シフト集約" ? "全体シフト" : savedTitle;
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isFromAdmin, setIsFromAdmin] = useState(false);
@@ -338,6 +339,17 @@ export default function App() {
     setHomeSelectedDate(null);
     setActiveTab("home");
     setIsFromAdmin(false);
+  };
+
+  const changeHomeWeek = (offset: number) => {
+    const today = new Date();
+    const diffToMonday = today.getDay() === 0 ? -6 : 1 - today.getDay();
+    const displayedMonday = new Date(today);
+    displayedMonday.setDate(today.getDate() + diffToMonday + offset * 7);
+    displayedMonday.setHours(0, 0, 0, 0);
+    setHomeWeekOffset(offset);
+    setHomeSelectedDate(null);
+    setCurrentMonth(getCurrentShiftMonth(displayedMonday, calendarPeriodSettings));
   };
 
   const goToCurrentShiftPeriod = () => {
@@ -1119,7 +1131,7 @@ export default function App() {
     const totalCols = exportEmployees.length + 2;
 
     // 題名とメタデータ
-    const titleRow = overallSheet.addRow(["全体シフト集約"]);
+    const titleRow = overallSheet.addRow(["全体シフト"]);
     titleRow.font = { size: 16, bold: true };
     overallSheet.mergeCells(1, 1, 1, totalCols);
     titleRow.alignment = { horizontal: 'center' };
@@ -1864,7 +1876,7 @@ export default function App() {
                 weekOffset={homeWeekOffset}
                 heatmapEnabled={heatmapEnabled}
                 monthDates={dateRange}
-                onWeekOffsetChange={setHomeWeekOffset}
+                onWeekOffsetChange={changeHomeWeek}
                 onDateSelect={setHomeSelectedDate}
                 onShowDashboard={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
@@ -1903,7 +1915,7 @@ export default function App() {
                           </CardTitle>
                         )}
                       </div>
-                      <CardDescription className="text-xs">
+                      <CardDescription className="dashboard-period-label">
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy/MM/dd")} - ${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}
                       </CardDescription>
                     </div>

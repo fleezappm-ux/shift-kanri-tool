@@ -54,6 +54,10 @@ body { margin:0; background:#f5f7fa; }
 .page-blue-header { color:#fff!important; background:linear-gradient(135deg,#0757c7 0%,#1374e8 66%,#20a4f3 100%)!important; border-color:rgba(255,255,255,.18)!important; }
 .page-blue-header [data-slot="card-title"],.page-blue-header [data-slot="card-description"],.page-blue-header svg { color:#fff!important; }
 .page-blue-header [data-slot="card-description"] { opacity:.82; }
+.dashboard-period-label { margin-top:4px; font-size:13px!important; font-weight:700; letter-spacing:.02em; }
+@media(min-width:901px){
+  .dashboard-period-label{display:inline-flex;margin-top:7px;padding:5px 11px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:rgba(255,255,255,.14);font-size:15px!important;font-weight:800;opacity:1!important}
+}
 .page-blue-header .employee-stats>div { background:rgba(255,255,255,.14)!important; }
 .page-blue-header .employee-stats span { color:#fff!important; }
 .page-blue-header .employee-stats [data-slot="badge"] { background:#fff!important; color:#164e9b!important; border-color:rgba(255,255,255,.3)!important; }

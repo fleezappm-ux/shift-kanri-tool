@@ -55,8 +55,11 @@ body { margin:0; background:#f5f7fa; }
 .page-blue-header [data-slot="card-title"],.page-blue-header [data-slot="card-description"],.page-blue-header svg { color:#fff!important; }
 .page-blue-header [data-slot="card-description"] { opacity:.82; }
 .dashboard-period-label { margin-top:4px; font-size:13px!important; font-weight:700; letter-spacing:.02em; }
+.shift-editor-heading{display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid #bfdbfe;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f8fbff);color:#0f3f86}
+.shift-editor-heading>div{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:900}.shift-editor-heading>strong{font-size:13px;color:#475569}.shift-editor-heading>[data-slot="badge"]{margin-left:auto}
 @media(min-width:901px){
   .dashboard-period-label{display:inline-flex;margin-top:7px;padding:5px 11px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:rgba(255,255,255,.14);font-size:15px!important;font-weight:800;opacity:1!important}
+  .admin-header-actions{gap:8px!important;padding:7px!important}.admin-header-actions button{height:42px!important;padding:0 15px!important;font-size:13px!important;border-radius:10px!important}.admin-header-actions svg{width:16px!important;height:16px!important}
 }
 .page-blue-header .employee-stats>div { background:rgba(255,255,255,.14)!important; }
 .page-blue-header .employee-stats span { color:#fff!important; }
@@ -132,6 +135,7 @@ body { margin:0; background:#f5f7fa; }
   .shift-bottom-nav{min-height:68px;padding-bottom:env(safe-area-inset-bottom);border-top:1px solid #cbd5e1!important}
   .shift-bottom-nav button{background:#fff!important;min-height:68px}
   .shift-page-header{gap:8px!important;margin:0!important}
+  .shift-editor-heading{padding:10px 12px;gap:8px}.shift-editor-heading>div{font-size:15px}.shift-editor-heading>strong{font-size:11px}.shift-editor-heading>[data-slot="badge"]{font-size:9px}
   .month-navigation{width:100%;justify-content:space-between;background:#fff!important;padding:5px!important}
   .month-navigation>button{gap:2px;font-size:12px;font-weight:800}
   .mobile-month-label{display:inline}

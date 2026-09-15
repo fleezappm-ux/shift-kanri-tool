@@ -13,6 +13,18 @@ export function saveShiftApiKey(value: string): void {
   localStorage.setItem(SHIFT_API_KEY_STORAGE, value.trim());
 }
 
+/** 全端末で共有される、期間単位のシフト確定状態を取得します。 */
+export async function fetchShiftPeriodStatus(periodStart: string): Promise<boolean> {
+  const json = await callGas("getShiftPeriodStatus", { periodStart }, false);
+  return Boolean(json.locked);
+}
+
+/** 期間単位の確定／作成中状態をGASへ保存します。 */
+export async function saveShiftPeriodStatus(periodStart: string, periodEnd: string, locked: boolean): Promise<boolean> {
+  const json = await callGas("saveShiftPeriodStatus", { periodStart, periodEnd, locked });
+  return Boolean(json.locked);
+}
+
 interface ShiftRow {
   id: string;
   "社員名"?: string;

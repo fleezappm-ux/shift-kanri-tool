@@ -52,7 +52,7 @@ import {
 import { Employee, DayShift, ShiftType, GlobalRemark, LeaveRequest, LeaveRequestStatus, LeaveRequestType, SpecialDayRule } from "./types";
 import { SHIFT_OPTIONS, verifyEditorPassword, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateConfiguredDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
-import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer } from "./lib/shift-sync";
+import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, fetchShiftPeriodStatus, saveShiftPeriodStatus } from "./lib/shift-sync";
 import { getJapaneseHolidayDates } from "./lib/japanese-holidays";
 import { chooseOutputFolder, getRememberedFolderName, saveBufferToRememberedFolder } from "./lib/output-destination";
 import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
@@ -208,6 +208,7 @@ export default function App() {
   const [draftPublishing, setDraftPublishing] = useState(false);
   const [publishedDraft, setPublishedDraft] = useState<PublishedDraft | null>(null);
   const [viewingPublishedDraft, setViewingPublishedDraft] = useState(false);
+  const [periodStatusLoading, setPeriodStatusLoading] = useState(false);
 
   useEffect(() => {
     if (syncState !== "saving") {
@@ -473,11 +474,10 @@ export default function App() {
     localStorage.setItem("active_tab", activeTab);
   }, [activeTab]);
 
-  const toggleLock = () => {
-    if (isLocked) {
-      setLockedMonths(prev => prev.filter(m => m !== currentMonthKey));
-      toast.info(`${format(currentMonth, "yyyy年MM月")}の編集ロックを解除しました`);
-    } else {
+  const toggleLock = async () => {
+    if (!dateRange.length || periodStatusLoading) return;
+    const nextLocked = !isLocked;
+    if (nextLocked) {
       const conflicts = dateRange.reduce((total, date) => {
         const remark = getGlobalRemark(date);
         if (remark?.type !== "祝日" && remark?.type !== "店休日") return total;
@@ -487,9 +487,20 @@ export default function App() {
         }).length;
       }, 0);
       if (conflicts > 0) toast.warning(`店休日・祝日に勤務が${conflicts}件あります。内容は変更せず確定しました`);
-
-      setLockedMonths(prev => [...prev, currentMonthKey]);
-      toast.success(`${format(currentMonth, "yyyy年MM月")}のシフトを確定しました`);
+    }
+    setPeriodStatusLoading(true);
+    try {
+      const savedLocked = await saveShiftPeriodStatus(getDateStr(dateRange[0]), getDateStr(dateRange[dateRange.length - 1]), nextLocked);
+      setLockedMonths(prev => savedLocked
+        ? [...new Set([...prev, currentMonthKey])]
+        : prev.filter(month => month !== currentMonthKey));
+      toast.success(savedLocked
+        ? `${format(currentMonth, "yyyy年MM月")}を確定シフトとして全端末へ共有しました`
+        : `${format(currentMonth, "yyyy年MM月")}をシフト案・作成中に戻しました`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "確定状態を保存できませんでした");
+    } finally {
+      setPeriodStatusLoading(false);
     }
   };
 
@@ -541,6 +552,24 @@ export default function App() {
   };
 
   const dateRange = generateConfiguredDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+
+  useEffect(() => {
+    if (!dateRange.length) return;
+    let cancelled = false;
+    setPeriodStatusLoading(true);
+    fetchShiftPeriodStatus(getDateStr(dateRange[0]))
+      .then(locked => {
+        if (cancelled) return;
+        setLockedMonths(previous => locked
+          ? [...new Set([...previous, currentMonthKey])]
+          : previous.filter(month => month !== currentMonthKey));
+      })
+      .catch(error => console.error("確定状態の取得に失敗しました", error))
+      .finally(() => { if (!cancelled) setPeriodStatusLoading(false); });
+    return () => { cancelled = true; };
+    // dateRangeはcurrentMonthKeyと期間設定から決まります。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   useEffect(() => {
     if (!dateRange.length) return;
@@ -1819,7 +1848,7 @@ export default function App() {
               <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={goToCurrentShiftPeriod}>
                 <RotateCcw className="w-3.5 h-3.5 mr-1" />当月へ戻る
               </Button>
-              <Button variant={isLocked ? "destructive" : "default"} size="sm" className={`h-8 text-[10px] font-bold ${isLocked ? "" : "bg-emerald-600 hover:bg-emerald-700"}`} onClick={toggleLock}>
+              <Button disabled={periodStatusLoading} variant={isLocked ? "destructive" : "default"} size="sm" className={`h-8 text-[10px] font-bold ${isLocked ? "" : "bg-emerald-600 hover:bg-emerald-700"}`} onClick={toggleLock}>
                 {isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{isLocked ? "確定解除" : "シフト確定"}
               </Button>
               <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={downloadExcel}>
@@ -1862,6 +1891,14 @@ export default function App() {
             </div>
           )}
         </header>
+        )}
+
+        {isFromAdmin && activeTab !== "admin" && (
+          <div className="shift-editor-heading">
+            <div><PencilLine className="w-5 h-5" /><span>シフト作成</span></div>
+            <strong>{dateRange.length ? `${format(dateRange[0], "yyyy/MM/dd")}〜${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}</strong>
+            <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
+          </div>
         )}
 
         <div className="flex-1 overflow-y-auto min-h-0 pt-2">
@@ -1920,7 +1957,7 @@ export default function App() {
                       </CardDescription>
                     </div>
                     <div className="dashboard-card-actions flex items-center gap-2">
-                      <Badge className={viewingPublishedDraft ? "bg-blue-600 text-white border-0" : isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{viewingPublishedDraft ? "公開中のシフト案" : isLocked ? "確定シフト" : "確定版"}</Badge>
+                      <Badge className={viewingPublishedDraft ? "bg-blue-600 text-white border-0" : isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{viewingPublishedDraft ? "公開中のシフト案" : periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
                       {!isFromAdmin && publishedDraft?.published && <Button variant="outline" size="sm" className="h-8 text-xs font-bold bg-white" onClick={() => setViewingPublishedDraft(value => !value)}>{viewingPublishedDraft ? "確定版を見る" : "公開案を見る"}</Button>}
                       {isFromAdmin ? (
                         <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>
@@ -2110,21 +2147,6 @@ export default function App() {
                 transition={{ duration: 0.2 }}
                 className="space-y-8"
               >
-                <div className="admin-shift-entry">
-                  <div>
-                    <p>勤務シフトを組む</p>
-                    <span>従業員ごとの勤務・休憩・コメントを編集します</span>
-                  </div>
-                  <Button
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
-                    onClick={() => {
-                      setActiveTab("dashboard");
-                      setIsFromAdmin(true);
-                    }}
-                  >
-                    <PencilLine className="w-4 h-4 mr-2" />シフト作成画面を開く
-                  </Button>
-                </div>
                 <div className="grid grid-cols-1 gap-6">
                   <Card className="border-border shadow-sm">
                     <CardHeader className="settings-card-header page-blue-header py-5 border-b border-border rounded-t-xl">
@@ -2169,9 +2191,10 @@ export default function App() {
                       </div>
                       <div className="rounded-2xl border-2 border-blue-100 bg-blue-50/50 p-5 space-y-4">
                         <div>
-                          <h4 className="text-base font-black text-blue-950">管理者・従業員ログイン</h4>
-                          <p className="mt-1 text-xs text-slate-600">管理者用接続キーはこの端末だけに保存します。従業員ログインとは別の設定です。</p>
+                          <h4 className="text-base font-black text-blue-950">管理者用GAS接続キー</h4>
+                          <p className="mt-1 text-xs text-slate-600">Notion保存、確定状態の共有、管理者操作に使用します。この端末だけに保存されます。</p>
                         </div>
+                        <p className="rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-600">従業員ID・パスワードはGAS側で設定済みです。安全のため、この画面には値を表示しません。</p>
                         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                           <Input type="password" value={managementApiKey} onChange={event => setManagementApiKey(event.target.value)} placeholder="管理者用GAS接続キー" className="h-11 bg-white" />
                           <Button className="h-11 font-bold" onClick={() => { saveManagementApiKey(managementApiKey); toast.success("この端末に接続キーを保存しました"); }}>この端末に保存</Button>
@@ -2453,6 +2476,7 @@ export default function App() {
                               {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
                             </select>
                             <Button
+                              disabled={periodStatusLoading}
                               variant={isLocked ? "outline" : "default"}
                               className="h-9 font-bold"
                               onClick={toggleLock}

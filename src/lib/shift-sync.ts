@@ -15,8 +15,18 @@ export function saveShiftApiKey(value: string): void {
 
 /** 全端末で共有される、期間単位のシフト確定状態を取得します。 */
 export async function fetchShiftPeriodStatus(periodStart: string): Promise<boolean> {
-  const json = await callGas("getShiftPeriodStatus", { periodStart }, false);
-  return Boolean(json.locked);
+  let timeoutId: number | undefined;
+  try {
+    const json = await Promise.race([
+      callGas("getShiftPeriodStatus", { periodStart }, false),
+      new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error("確定状態の確認がタイムアウトしました")), 10000);
+      })
+    ]);
+    return Boolean(json.locked);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
 }
 
 /** 期間単位の確定／作成中状態をGASへ保存します。 */

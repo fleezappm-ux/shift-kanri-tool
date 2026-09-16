@@ -1927,7 +1927,7 @@ export default function App() {
         </header>
         )}
 
-        <div className="flex-1 overflow-y-auto min-h-0 pt-2">
+        <div className={`flex-1 min-h-0 pt-2 ${activeTab === "dashboard" ? "overflow-y-auto md:overflow-hidden" : "overflow-y-auto"}`}>
           <AnimatePresence mode="wait">
             {activeTab === "home" ? (
               <HomeView
@@ -1951,12 +1951,13 @@ export default function App() {
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
+                className="md:h-full md:min-h-0"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card className="dashboard-card border-border shadow-none">
+                <Card className="dashboard-card border-border shadow-none md:h-full md:min-h-0 md:flex md:flex-col">
                   <CardHeader className="dashboard-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 group">
@@ -1988,7 +1989,7 @@ export default function App() {
                       {isFromAdmin && <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-0">
+                  <CardContent className="p-0 md:flex-1 md:min-h-0 md:flex md:flex-col">
                     {isFromAdmin && (
                       <div className="dashboard-mobile-edit-hub">
                         <div>

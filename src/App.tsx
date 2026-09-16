@@ -62,7 +62,7 @@ import { PersonalShiftList } from "./components/PersonalShiftList";
 import { cancelLeaveRequest, fetchLeaveRequests, submitLeaveRequest, updateLeaveRequestStatus } from "./lib/leave-request-sync";
 import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
-import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule } from "./lib/special-day-utils";
+import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
 import { getManagementApiKey, saveManagementApiKey } from "./lib/auth-sync";
 import { fetchPublishedDraft, PublishedDraft, publishShiftDraft, unpublishShiftDraft } from "./lib/draft-sync";
@@ -226,7 +226,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     fetchSpecialDayRules()
-      .then(rules => { if (!cancelled && rules.length) setSpecialDayRules(rules); })
+      .then(rules => { if (!cancelled) setSpecialDayRules(withDefaultSpecialDayRules(rules)); })
       .catch(error => console.error("特殊日設定の取得に失敗しました", error));
     return () => { cancelled = true; };
   }, []);

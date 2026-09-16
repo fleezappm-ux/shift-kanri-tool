@@ -1729,7 +1729,7 @@ export default function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6">
+      <main className={`shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6 ${activeTab === "dashboard" ? "dashboard-active" : ""}`}>
         {activeTab !== "home" && (
         <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">

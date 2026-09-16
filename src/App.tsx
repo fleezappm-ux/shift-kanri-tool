@@ -1882,6 +1882,15 @@ export default function App() {
               <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={createNextMonthShifts}>
                 <PlusCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />翌月シフト作成（自動）
               </Button>
+              <Button
+                disabled={draftPublishing}
+                variant={draftPublished ? "destructive" : "outline"}
+                size="sm"
+                className="h-8 text-[10px] font-bold bg-white"
+                onClick={handleToggleDraftPublication}
+              >
+                {draftPublishing ? "処理中…" : draftPublished ? "案を非公開" : "案を公開"}
+              </Button>
               {showClearConfirm ? (
                 <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
                   <span className="text-[10px] font-bold text-red-600 px-2">全消去しますか？</span>
@@ -1976,18 +1985,7 @@ export default function App() {
                     <div className="dashboard-card-actions flex items-center gap-2">
                       <Badge className={viewingPublishedDraft ? "bg-blue-600 text-white border-0" : isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{viewingPublishedDraft ? "公開中のシフト案" : periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
                       {!isFromAdmin && publishedDraft?.published && <Button variant="outline" size="sm" className="h-8 text-xs font-bold bg-white" onClick={() => setViewingPublishedDraft(value => !value)}>{viewingPublishedDraft ? "確定版を見る" : "公開案を見る"}</Button>}
-                      {isFromAdmin ? (
-                        <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs font-bold"
-                          onClick={() => requestEditAccess(() => setIsFromAdmin(true))}
-                        >
-                          <PencilLine className="w-3.5 h-3.5 mr-1.5" />補足を編集
-                        </Button>
-                      )}
+                      {isFromAdmin && <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0">
@@ -2215,10 +2213,6 @@ export default function App() {
                         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                           <Input type="password" value={managementApiKey} onChange={event => setManagementApiKey(event.target.value)} placeholder="管理者用GAS接続キー" className="h-11 bg-white" />
                           <Button className="h-11 font-bold" onClick={() => { saveManagementApiKey(managementApiKey); toast.success("この端末に接続キーを保存しました"); }}>この端末に保存</Button>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white p-3">
-                          <div><strong className="block text-sm">シフト案の公開</strong><span className="text-[11px] text-slate-500">確定版とは別に、現在の編集内容を従業員へ公開します</span></div>
-                          <Button variant={draftPublished ? "destructive" : "default"} disabled={draftPublishing || isLocked} onClick={handleToggleDraftPublication}>{draftPublishing ? "処理中…" : draftPublished ? "案を非公開にする" : "現在の案を公開する"}</Button>
                         </div>
                         <p className="text-[11px] text-slate-500">従業員は共通の従業員ID・パスワードでログイン後、自分の名前を選んで希望を提出します。</p>
                       </div>

@@ -768,14 +768,13 @@ export default function App() {
         });
         return Array.from(byDate.values());
       });
-      // Notionの読込完了後に適用することで、保存済み勤務に上書きされる競合を防ぐ。
+      // 保存済みの勤務は変更せず、まだシフト行がない場合だけ休みの初期値を追加する。
       setEmployees(prev => prev.map(emp => {
         const shifts = [...emp.shifts];
         closedHolidays.forEach(date => {
           const index = shifts.findIndex(shift => shift.date.slice(0, 10) === date);
           const offShift: DayShift = { date, shift: "休み", breakTime: "0:00", workTime: "0:00", comment: index >= 0 ? shifts[index].comment : "" };
-          if (index >= 0) shifts[index] = { ...shifts[index], ...offShift, customShiftText: undefined };
-          else shifts.push(offShift);
+          if (index < 0) shifts.push(offShift);
         });
         return { ...emp, shifts };
       }));
@@ -1057,17 +1056,11 @@ export default function App() {
     }));
   };
 
-  /** 指定日を、全従業員「休み」にします（既に「休み」「有休」の人は変更しません）。祝日・店休日のデフォルト適用に使います。 */
+  /** 指定日に未入力の行がない従業員だけ「休み」を追加します。登録済み勤務は上書きしません。 */
   const setAllEmployeesOff = (dateStr: string) => {
     setEmployees(prev => prev.map(emp => {
       const idx = emp.shifts.findIndex(s => s.date === dateStr);
-      if (idx >= 0) {
-        const currentShift = emp.shifts[idx].shift;
-        if (currentShift === "休み" || currentShift === "有休") return emp;
-        const newShifts = [...emp.shifts];
-        newShifts[idx] = { ...newShifts[idx], shift: "休み", customShiftText: undefined, breakTime: "0:00", workTime: "0:00" };
-        return { ...emp, shifts: newShifts };
-      }
+      if (idx >= 0) return emp;
       return { ...emp, shifts: [...emp.shifts, { date: dateStr, shift: "休み" as ShiftType, breakTime: "0:00", workTime: "0:00", comment: "" }] };
     }));
   };
@@ -1464,6 +1457,7 @@ export default function App() {
   };
 
   const getRowBgClass = (date: Date) => {
+    if (!storeMaster.showSpecialDayBands) return "";
     const gr = getGlobalRemark(date);
     const isSunday = date.getDay() === 0;
     
@@ -1744,7 +1738,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className={`shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6 ${activeTab === "dashboard" ? "dashboard-active" : ""}`}>
-        {activeTab !== "home" && (
+        {activeTab !== "home" && activeTab !== "admin" && (
         <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
             <Button
@@ -2170,10 +2164,10 @@ export default function App() {
                         </TableBody>
                       </Table>
                     </div>
-                    <div className="dashboard-band-legend">
+                    {storeMaster.showSpecialDayBands && <div className="dashboard-band-legend">
                       <strong>帯色の見方</strong>
                       <div>{bandLegendItems.map(item => <span key={`${item.color}-${item.label}`}><i className={`band-swatch band-${item.color}`} />{item.label}</span>)}</div>
-                    </div>
+                    </div>}
                   </CardContent>
                 </Card>
               </motion.div>

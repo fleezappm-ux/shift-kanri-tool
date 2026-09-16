@@ -3,15 +3,28 @@ import { GlobalRemark, SpecialDayRule } from "../types";
 
 export const DEFAULT_SPECIAL_DAY_RULES: SpecialDayRule[] = [
   {
-    id: "tanikawa-closed",
-    name: "谷川整形休診",
-    color: "blue",
-    behavior: "information",
+    id: "national-holiday",
+    name: "祝日",
+    color: "red",
+    behavior: "all-off",
     enabled: true,
-    mode: "recurring",
-    weekday: 6,
-    weeks: [1, 3],
-    dates: []
+    mode: "annual",
+    weekday: 0,
+    weeks: [1],
+    dates: [],
+    order: 0
+  },
+  {
+    id: "store-closed",
+    name: "店休日",
+    color: "red",
+    behavior: "all-off",
+    enabled: true,
+    mode: "annual",
+    weekday: 0,
+    weeks: [1],
+    dates: [],
+    order: 1
   },
   {
     id: "duty-pharmacy",
@@ -22,14 +35,29 @@ export const DEFAULT_SPECIAL_DAY_RULES: SpecialDayRule[] = [
     mode: "annual",
     weekday: 0,
     weeks: [1],
-    dates: []
+    dates: [],
+    order: 2
+  },
+  {
+    id: "tanikawa-closed",
+    name: "谷川整形休診",
+    color: "blue",
+    behavior: "information",
+    enabled: true,
+    mode: "recurring",
+    weekday: 6,
+    weeks: [1, 3],
+    dates: [],
+    order: 3
   }
 ];
 
 /** 既存店舗の保存済み設定にも、後から追加した標準ルールを安全に補完します。 */
 export function withDefaultSpecialDayRules(rules: SpecialDayRule[]): SpecialDayRule[] {
   const names = new Set(rules.map(rule => rule.name));
-  return [...rules, ...DEFAULT_SPECIAL_DAY_RULES.filter(rule => !names.has(rule.name)).map(rule => ({ ...rule, dates: [...rule.dates], weeks: [...rule.weeks] }))];
+  return [...rules, ...DEFAULT_SPECIAL_DAY_RULES.filter(rule => !names.has(rule.name)).map(rule => ({ ...rule, dates: [...rule.dates], weeks: [...rule.weeks] }))]
+    .map((rule, index) => ({ ...rule, order: rule.order ?? index }))
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 }
 
 export function matchesSpecialDayRule(date: Date, rule: SpecialDayRule): boolean {

@@ -677,8 +677,11 @@ export default function App() {
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];
   const bandLegendItems = [
-    { color: "red", label: "日曜・祝日・店休日" },
-    ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => ({ color: rule.color, label: rule.name }))
+    { color: "red", label: "通常の休業日" },
+    ...(storeMaster.useJapaneseHolidays && storeMaster.holidayBandEnabled ? [{ color: storeMaster.holidayColor, label: "国民の祝日" }] : []),
+    ...(storeMaster.yearEndEnabled && storeMaster.yearEndBandEnabled ? [{ color: storeMaster.yearEndColor, label: "年末年始" }] : []),
+    ...(storeMaster.obonEnabled && storeMaster.obonBandEnabled ? [{ color: storeMaster.obonColor, label: "お盆" }] : []),
+    ...specialDayRules.filter(rule => rule.enabled && rule.name !== "祝日").sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => ({ color: rule.color, label: rule.name }))
   ].filter((item, index, items) => items.findIndex(candidate => candidate.color === item.color && candidate.label === item.label) === index);
 
   const handleSaveSpecialDayRules = async (rules: SpecialDayRule[]) => {
@@ -1457,14 +1460,15 @@ export default function App() {
   };
 
   const getRowBgClass = (date: Date) => {
-    if (!storeMaster.showSpecialDayBands) return "";
     const gr = getGlobalRemark(date);
-    const isSunday = date.getDay() === 0;
-    
+    if (gr?.type === "祝日") return storeMaster.holidayBandEnabled ? `shift-row-special-${storeMaster.holidayColor}` : "";
     const color = colorForRemark(gr, specialDayRules);
     if (color) return `shift-row-special-${color}`;
-    if (isSunday) return "shift-row-holiday";
-    
+    const monthDay = format(date, "MM-dd");
+    const inRange = (start: string, end: string) => start <= end ? monthDay >= start && monthDay <= end : monthDay >= start || monthDay <= end;
+    if (storeMaster.yearEndEnabled && storeMaster.yearEndBandEnabled && inRange(storeMaster.yearEndStart, storeMaster.yearEndEnd)) return `shift-row-special-${storeMaster.yearEndColor}`;
+    if (storeMaster.obonEnabled && storeMaster.obonBandEnabled && inRange(storeMaster.obonStart, storeMaster.obonEnd)) return `shift-row-special-${storeMaster.obonColor}`;
+    if (!storeMaster.businessDays.includes(date.getDay())) return "shift-row-holiday";
     return "";
   };
 
@@ -2164,7 +2168,7 @@ export default function App() {
                         </TableBody>
                       </Table>
                     </div>
-                    {storeMaster.showSpecialDayBands && <div className="dashboard-band-legend">
+                    {bandLegendItems.length > 0 && <div className="dashboard-band-legend">
                       <strong>帯色の見方</strong>
                       <div>{bandLegendItems.map(item => <span key={`${item.color}-${item.label}`}><i className={`band-swatch band-${item.color}`} />{item.label}</span>)}</div>
                     </div>}

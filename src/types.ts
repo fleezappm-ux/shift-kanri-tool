@@ -41,6 +41,7 @@ export interface SpecialDayRule {
   weekday: number;
   weeks: number[];
   dates: string[];
+  order?: number;
 }
 
 export interface Employee {

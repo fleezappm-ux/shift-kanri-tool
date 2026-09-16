@@ -20,7 +20,11 @@ import {
   LockKeyhole,
   LockOpen,
   RotateCcw,
-  Settings
+  Settings,
+  Building2,
+  ListChecks,
+  CalendarDays,
+  SlidersHorizontal
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -66,9 +70,11 @@ import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpe
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
 import { getManagementApiKey, saveManagementApiKey } from "./lib/auth-sync";
 import { fetchPublishedDraft, PublishedDraft, publishShiftDraft, unpublishShiftDraft } from "./lib/draft-sync";
+import { DropdownMasterSettings } from "./components/DropdownMasterSettings";
+import { DEFAULT_STORE_MASTER, StoreMaster, StoreMasterSettings } from "./components/StoreMasterSettings";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
-const BASE_GLOBAL_REMARK_TYPES = ["谷川整形休診", "祝日", "当番薬局", "店休日", "コメント"] as const;
+const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -89,6 +95,12 @@ function getCurrentShiftMonth(today = new Date(), settings = DEFAULT_CALENDAR_PE
 }
 
 export default function App() {
+  const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations">("menu");
+  const [storeMaster, setStoreMaster] = useState<StoreMaster>(() => {
+    const saved = localStorage.getItem("store_master_settings");
+    if (!saved) return DEFAULT_STORE_MASTER;
+    try { return { ...DEFAULT_STORE_MASTER, ...JSON.parse(saved) }; } catch { return DEFAULT_STORE_MASTER; }
+  });
   const [calendarPeriodSettings, setCalendarPeriodSettings] = useState<CalendarPeriodSettings>(() => {
     const saved = localStorage.getItem("calendar_period_settings");
     if (saved) {
@@ -663,10 +675,10 @@ export default function App() {
   const dashboardEmployees = sortEmployeesForDisplay(viewingPublishedDraft && !isFromAdmin && publishedDraft ? publishedDraft.employees : employees);
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
-  const globalRemarkTypes = [...new Set([...BASE_GLOBAL_REMARK_TYPES, ...specialDayRules.map(rule => rule.name).filter(Boolean), "なし"])];
+  const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];
   const bandLegendItems = [
     { color: "red", label: "日曜・祝日・店休日" },
-    ...specialDayRules.filter(rule => rule.enabled).map(rule => ({ color: rule.color, label: rule.name }))
+    ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => ({ color: rule.color, label: rule.name }))
   ].filter((item, index, items) => items.findIndex(candidate => candidate.color === item.color && candidate.label === item.label) === index);
 
   const handleSaveSpecialDayRules = async (rules: SpecialDayRule[]) => {
@@ -1658,6 +1670,7 @@ export default function App() {
                   requestEditAccess(() => {
                     setActiveTab("admin");
                     setIsFromAdmin(true);
+                    setSettingsPage("menu");
                   });
                 }}
               >
@@ -1722,7 +1735,7 @@ export default function App() {
         </button>
         <button
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "admin" && isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
-          onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); }); }}
+          onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); setSettingsPage("menu"); }); }}
         >
           <FileCode className="w-5 h-5" />
           設定
@@ -2101,7 +2114,7 @@ export default function App() {
                                       </SelectTrigger>
                                       <SelectContent className="bg-white border-border shadow-xl z-50">
                                         {globalRemarkTypes.map(type => (
-                                          <SelectItem key={type} value={type} className="text-xs">{type}</SelectItem>
+                                          <SelectItem key={type} value={type} className="text-xs">{type === "コメント" ? "自由コメント" : type}</SelectItem>
                                         ))}
                                       </SelectContent>
                                     </Select>
@@ -2164,6 +2177,38 @@ export default function App() {
                   </CardContent>
                 </Card>
               </motion.div>
+            ) : activeTab === "admin" && settingsPage === "menu" ? (
+              <motion.div key="settings-menu" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+                <Card className="border-border shadow-sm">
+                  <CardHeader className="settings-card-header page-blue-header rounded-t-xl border-b py-5">
+                    <CardTitle className="flex items-center gap-2 text-xl"><Settings className="h-5 w-5" />設定</CardTitle>
+                    <CardDescription className="text-xs">変更したい項目を選んでください</CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-4 p-6 sm:grid-cols-2">
+                    {[
+                      { key: "store", icon: Building2, title: "店舗マスター", description: "店舗名、集計期間、営業曜日、祝日・年末年始・お盆" },
+                      { key: "dropdown", icon: ListChecks, title: "プルダウンマスター", description: "備考項目の名前、帯色、動作、有効・無効、並び順" },
+                      { key: "special", icon: CalendarDays, title: "特殊日設定", description: "当番薬局、当番医、臨時休業など年ごとに変わる日付" },
+                      { key: "operations", icon: SlidersHorizontal, title: "従業員・シフト設定", description: "従業員、勤務パターン、接続キー、出力設定" }
+                    ].map(item => <button key={item.key} type="button" onClick={() => setSettingsPage(item.key as typeof settingsPage)} className="group flex min-h-32 items-center gap-4 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/50">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><item.icon className="h-6 w-6" /></span>
+                      <span><strong className="flex items-center gap-2 text-base text-slate-900">{item.title}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" /></strong><small className="mt-1 block leading-relaxed text-slate-500">{item.description}</small></span>
+                    </button>)}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ) : activeTab === "admin" && settingsPage === "store" ? (
+              <motion.div key="settings-store" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} /></CardContent></Card>
+              </motion.div>
+            ) : activeTab === "admin" && settingsPage === "dropdown" ? (
+              <motion.div key="settings-dropdown" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>プルダウンマスター</CardTitle><CardDescription>全体シフトの備考欄に表示する項目</CardDescription></div></div></CardHeader><CardContent className="p-6"><DropdownMasterSettings rules={specialDayRules} loading={specialDayLoading} onSave={handleSaveSpecialDayRules} /></CardContent></Card>
+              </motion.div>
+            ) : activeTab === "admin" && settingsPage === "special" ? (
+              <motion.div key="settings-special" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>特殊日設定</CardTitle><CardDescription>年ごとに変わる日付・店舗固有の定休日</CardDescription></div></div></CardHeader><CardContent className="p-6"><SpecialDaySettings rules={specialDayRules} loading={specialDayLoading} onSave={handleSaveSpecialDayRules} /></CardContent></Card>
+              </motion.div>
             ) : activeTab === "admin" ? (
               <motion.div
                 key="admin"
@@ -2178,43 +2223,12 @@ export default function App() {
                     <CardHeader className="settings-card-header page-blue-header py-5 border-b border-border rounded-t-xl">
                       <CardTitle className="text-xl flex items-center gap-2">
                         <Users className="w-4 h-4 text-primary" />
-                        基本設定
+                        従業員・シフト設定
                       </CardTitle>
-                      <CardDescription className="text-xs">従業員名やシフトパターンの名称をカスタマイズします</CardDescription>
+                      <CardDescription className="text-xs">従業員、勤務パターン、接続キー、出力を設定します</CardDescription>
                     </CardHeader>
                     <CardContent className="settings-content p-6 space-y-5">
-                      <div className="calendar-period-settings">
-                        <div>
-                          <h4>カレンダー期間の設定</h4>
-                          <p>店舗の締め日に合わせて、毎月のシフトカレンダーを自動作成します。</p>
-                        </div>
-                        <div className="calendar-period-controls">
-                          <label>
-                            <span>開始日</span>
-                            <select
-                              value={calendarPeriodDraft.startDay}
-                              onChange={event => {
-                                const startDay = Number(event.target.value);
-                                setCalendarPeriodDraft({ startDay, endDay: startDay === 1 ? 0 : startDay - 1 });
-                              }}
-                            >
-                              {Array.from({ length: 28 }, (_, index) => index + 1).map(day => <option key={day} value={day}>毎月{day}日</option>)}
-                            </select>
-                          </label>
-                          <div className="calendar-period-arrow">→</div>
-                          <label>
-                            <span>終了日（自動）</span>
-                            <div className="calendar-period-end">{calendarPeriodDraft.endDay === 0 ? "同月末日" : `翌月${calendarPeriodDraft.endDay}日`}</div>
-                          </label>
-                          <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold" disabled={calendarPeriodSaving} onClick={handleSaveCalendarPeriod}>
-                            {calendarPeriodSaving ? "保存中…" : "この期間で作成"}
-                          </Button>
-                        </div>
-                        <p className="calendar-period-example">
-                          現在：毎月{calendarPeriodSettings.startDay}日〜{calendarPeriodSettings.endDay === 0 ? "同月末日" : `翌月${calendarPeriodSettings.endDay}日`}　
-                          例：21日開始なら21日〜翌月20日、1日開始なら1日〜月末です。
-                        </p>
-                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button>
                       <div className="rounded-2xl border-2 border-blue-100 bg-blue-50/50 p-5 space-y-4">
                         <div>
                           <h4 className="text-base font-black text-blue-950">管理者用GAS接続キー</h4>
@@ -2227,8 +2241,6 @@ export default function App() {
                         </div>
                         <p className="text-[11px] text-slate-500">従業員は共通の従業員ID・パスワードでログイン後、自分の名前を選んで希望を提出します。</p>
                       </div>
-                      <SpecialDaySettings rules={specialDayRules} loading={specialDayLoading} onSave={handleSaveSpecialDayRules} />
-
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">従業員マスター（名前の変更・個別シート編集）</h4>

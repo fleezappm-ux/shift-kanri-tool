@@ -208,6 +208,7 @@ export default function App() {
   const [draftPublishing, setDraftPublishing] = useState(false);
   const [publishedDraft, setPublishedDraft] = useState<PublishedDraft | null>(null);
   const [viewingPublishedDraft, setViewingPublishedDraft] = useState(false);
+  const [dashboardListView, setDashboardListView] = useState(false);
   const [periodStatusLoading, setPeriodStatusLoading] = useState(false);
 
   useEffect(() => {
@@ -1957,7 +1958,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
               >
-                <Card className="dashboard-card border-border shadow-none md:h-full md:min-h-0 md:flex md:flex-col">
+                <Card className={`dashboard-card border-border shadow-none md:h-full md:min-h-0 md:flex md:flex-col ${dashboardListView ? "dashboard-list-view" : ""}`}>
                   <CardHeader className="dashboard-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 group">
@@ -1984,8 +1985,17 @@ export default function App() {
                       </CardDescription>
                     </div>
                     <div className="dashboard-card-actions flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="dashboard-list-toggle h-8 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800"
+                        onClick={() => setDashboardListView(value => !value)}
+                      >
+                        <Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "30日一覧"}
+                      </Button>
                       <Badge className={viewingPublishedDraft ? "bg-blue-600 text-white border-0" : isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{viewingPublishedDraft ? "公開中のシフト案" : periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
-                      {!isFromAdmin && publishedDraft?.published && <Button variant="outline" size="sm" className="h-8 text-xs font-bold bg-white" onClick={() => setViewingPublishedDraft(value => !value)}>{viewingPublishedDraft ? "確定版を見る" : "公開案を見る"}</Button>}
+                      <Badge className={draftPublished ? "bg-emerald-500 text-white border-0" : "bg-white text-slate-600 border border-white/70"}>{draftPublished ? "公開中" : "非公開"}</Badge>
+                      {!isFromAdmin && publishedDraft?.published && <Button variant="outline" size="sm" className="h-8 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800" onClick={() => setViewingPublishedDraft(value => !value)}>{viewingPublishedDraft ? "確定版を見る" : "公開案を見る"}</Button>}
                       {isFromAdmin && <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>}
                     </div>
                   </CardHeader>

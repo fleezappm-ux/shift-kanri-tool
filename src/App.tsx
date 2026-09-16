@@ -646,6 +646,19 @@ export default function App() {
   const homeSelectedDateStr = homeSelectedDate && homeWeekDates.some(date => getDateStr(date) === homeSelectedDate)
     ? homeSelectedDate
     : (homeWeekDates.some(date => getDateStr(date) === todayStr) ? todayStr : getDateStr(homeWeekDates[0]));
+  const homeOutputPeriods = Array.from(
+    new Map(homeWeekDates.map(date => {
+      const anchor = getCurrentShiftMonth(date, calendarPeriodSettings);
+      const range = generateConfiguredDateRange(
+        anchor.getFullYear(),
+        anchor.getMonth() + 1,
+        calendarPeriodSettings.startDay,
+        calendarPeriodSettings.endDay
+      );
+      return [getDateStr(range[0]), range] as const;
+    })).values()
+  );
+  const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
   const dashboardEmployees = sortEmployeesForDisplay(viewingPublishedDraft && !isFromAdmin && publishedDraft ? publishedDraft.employees : employees);
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
@@ -1101,10 +1114,11 @@ export default function App() {
     toast.success(`${format(currentMonth, "yyyy年MM月")}のシフトをすべてクリアしました`);
   };
 
-  const downloadCSV = () => {
+  const downloadCSV = (outputDateRange: Date[] = dateRange) => {
+    if (!outputDateRange.length) return;
     const exportEmployees = sortEmployeesForDisplay(employees);
     const headers = ["日付", "曜日", ...exportEmployees.flatMap(e => [`${e.name}(シフト)`, `${e.name}(備考)`]), "全体備考"];
-    const rows = dateRange.map(date => {
+    const rows = outputDateRange.map(date => {
       const dateStr = getDateStr(date);
       const gr = getGlobalRemark(date);
       const row = [
@@ -1125,7 +1139,7 @@ export default function App() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `shift_${currentMonthKey}.csv`);
+    link.setAttribute("download", `shift_${getDateStr(outputDateRange[0])}_${getDateStr(outputDateRange[outputDateRange.length - 1])}.csv`);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -1133,7 +1147,8 @@ export default function App() {
     toast.success("CSVをダウンロードしました");
   };
 
-  const downloadExcel = async () => {
+  const downloadExcel = async (outputDateRange: Date[] = dateRange) => {
+    if (!outputDateRange.length) return;
     const ExcelJS = await import("exceljs");
     const exportEmployees = sortEmployeesForDisplay(employees);
     const workbook = new ExcelJS.Workbook();
@@ -1165,7 +1180,7 @@ export default function App() {
     overallSheet.mergeCells(1, 1, 1, totalCols);
     titleRow.alignment = { horizontal: 'center' };
 
-    const periodStr = `集計期間: ${format(dateRange[0], "yyyy/MM/dd")} 〜 ${format(dateRange[dateRange.length - 1], "yyyy/MM/dd")}`;
+    const periodStr = `集計期間: ${format(outputDateRange[0], "yyyy/MM/dd")} 〜 ${format(outputDateRange[outputDateRange.length - 1], "yyyy/MM/dd")}`;
     const outputDateStr = `出力日: ${format(new Date(), "yyyy/MM/dd")}`;
     const metaRow = overallSheet.addRow([periodStr, ...Array(exportEmployees.length).fill(""), outputDateStr]);
     overallSheet.mergeCells(2, 1, 2, totalCols - 1);
@@ -1185,7 +1200,7 @@ export default function App() {
       };
     });
 
-    dateRange.forEach(date => {
+    outputDateRange.forEach(date => {
       const gr = getGlobalRemark(date);
       let remarkText = "";
       if (gr && gr.type !== "なし") {
@@ -1251,7 +1266,7 @@ export default function App() {
 
     exportEmployees.forEach(emp => {
       const stats = emp.shifts
-        .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
+        .filter(s => outputDateRange.some(d => s.date.startsWith(getDateStr(d))))
         .reduce((acc, s) => {
           const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有休";
           const [wh, wm] = (s.workTime || "0:00").split(":").map(Number);
@@ -1314,7 +1329,7 @@ export default function App() {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
       });
 
-      dateRange.forEach(date => {
+      outputDateRange.forEach(date => {
         const s = getShift(emp, date);
         const gr = getGlobalRemark(date);
         let remarkText = "";
@@ -1372,7 +1387,7 @@ export default function App() {
 
       // 合計行の追加
       const stats = emp.shifts
-        .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
+        .filter(s => outputDateRange.some(d => s.date.startsWith(getDateStr(d))))
         .reduce((acc, s) => {
           const isWorking = s.shift && s.shift !== "休み" && s.shift !== "有休";
           const [wh, wm] = (s.workTime || "0:00").split(":").map(Number);
@@ -1420,7 +1435,7 @@ export default function App() {
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const fileName = `shift_${currentMonthKey}.xlsx`;
+    const fileName = `shift_${getDateStr(outputDateRange[0])}_${getDateStr(outputDateRange[outputDateRange.length - 1])}.xlsx`;
     const savedToFolder = await saveBufferToRememberedFolder(fileName, buffer as ArrayBuffer);
     if (savedToFolder) {
       toast.success(`保存先フォルダに ${fileName} を書き出しました`);
@@ -1604,17 +1619,27 @@ export default function App() {
                     <Download className="w-4 h-4 mr-3 text-green-600" />
                     <span className="flex flex-col items-start leading-tight">
                       <span>データ出力</span>
-                      <span className="text-[10px] font-medium opacity-70">{format(dateRange[0], "MM/dd")}〜{format(dateRange[dateRange.length - 1], "MM/dd")}</span>
+                      <span className="text-[10px] font-medium opacity-70">
+                        {outputPeriods.map(period => `${format(period[0], "MM/dd")}〜${format(period[period.length - 1], "MM/dd")}`).join(" / ")}
+                      </span>
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="bg-white border-border shadow-2xl z-50 w-56 p-1">
-                  <DropdownMenuItem className="text-xs font-medium cursor-pointer py-2 px-3 rounded-md focus:bg-slate-100 transition-colors" onClick={downloadCSV}>
-                    <FileCode className="w-3 h-3 mr-2 text-slate-400" /> CSV形式でダウンロード
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs font-medium cursor-pointer py-2 px-3 rounded-md focus:bg-slate-100 transition-colors" onClick={downloadExcel}>
-                    <Grid3X3 className="w-3 h-3 mr-2 text-green-600" /> Excel形式でダウンロード
-                  </DropdownMenuItem>
+                  {outputPeriods.map(period => {
+                    const periodLabel = `${format(period[0], "MM/dd")}〜${format(period[period.length - 1], "MM/dd")}`;
+                    return (
+                      <div key={getDateStr(period[0])} className="border-b border-slate-100 last:border-b-0 py-1">
+                        <div className="px-3 py-1 text-[10px] font-black text-slate-500">{periodLabel}</div>
+                        <DropdownMenuItem className="text-xs font-medium cursor-pointer py-2 px-3 rounded-md focus:bg-slate-100 transition-colors" onClick={() => downloadCSV(period)}>
+                          <FileCode className="w-3 h-3 mr-2 text-slate-400" /> CSV形式でダウンロード
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-xs font-medium cursor-pointer py-2 px-3 rounded-md focus:bg-slate-100 transition-colors" onClick={() => void downloadExcel(period)}>
+                          <Grid3X3 className="w-3 h-3 mr-2 text-green-600" /> Excel形式でダウンロード
+                        </DropdownMenuItem>
+                      </div>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -1851,7 +1876,7 @@ export default function App() {
               <Button disabled={periodStatusLoading} variant={isLocked ? "destructive" : "default"} size="sm" className={`h-8 text-[10px] font-bold ${isLocked ? "" : "bg-emerald-600 hover:bg-emerald-700"}`} onClick={toggleLock}>
                 {isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{isLocked ? "確定解除" : "シフト確定"}
               </Button>
-              <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={downloadExcel}>
+              <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={() => void downloadExcel()}>
                 <Download className="w-3.5 h-3.5 mr-1 text-green-600" />Excel出力
               </Button>
               <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={createNextMonthShifts}>
@@ -1891,14 +1916,6 @@ export default function App() {
             </div>
           )}
         </header>
-        )}
-
-        {isFromAdmin && activeTab !== "admin" && (
-          <div className="shift-editor-heading">
-            <div><PencilLine className="w-5 h-5" /><span>シフト作成</span></div>
-            <strong>{dateRange.length ? `${format(dateRange[0], "yyyy/MM/dd")}〜${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}</strong>
-            <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
-          </div>
         )}
 
         <div className="flex-1 overflow-y-auto min-h-0 pt-2">
@@ -2384,10 +2401,10 @@ export default function App() {
                       <div className="pt-6 border-t border-slate-100">
                         <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">シフトデータ出力</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <Button variant="outline" className="h-11 font-bold" onClick={downloadCSV}>
+                          <Button variant="outline" className="h-11 font-bold" onClick={() => downloadCSV()}>
                             <FileCode className="w-4 h-4 mr-2" />CSV出力
                           </Button>
-                          <Button className="h-11 bg-green-600 hover:bg-green-700 text-white font-bold" onClick={downloadExcel}>
+                          <Button className="h-11 bg-green-600 hover:bg-green-700 text-white font-bold" onClick={() => void downloadExcel()}>
                             <Grid3X3 className="w-4 h-4 mr-2" />Excel出力
                           </Button>
                         </div>

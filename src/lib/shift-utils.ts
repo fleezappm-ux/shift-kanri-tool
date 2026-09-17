@@ -7,13 +7,14 @@ export function resolveCycleShift(
   patterns: CyclePatterns,
   cycleType: number,
   dayOfWeek: number,
-  isWeek2: boolean
+  weekIndex: number
 ): ShiftType {
   const pattern = patterns[cycleType];
   if (!pattern) return "";
   const entry = pattern[dayOfWeek];
   if (!entry) return "";
-  return isWeek2 ? entry.week2 : entry.week1;
+  const key = `week${Math.max(0, Math.min(3, weekIndex)) + 1}` as "week1" | "week2" | "week3" | "week4";
+  return entry[key] ?? entry.week1;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Employee, DayShift, ShiftType, GlobalRemark } from "../types";
 import { SHIFT_OPTIONS } from "../constants";
+import { getShiftSession } from "./auth-sync";
 
 // ファーマシーOSのGAS（Web App）のURL。デプロイし直してもURLは変わらない想定。
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
@@ -37,6 +38,7 @@ export async function saveShiftPeriodStatus(periodStart: string, periodEnd: stri
 
 interface ShiftRow {
   id: string;
+  "従業員ID"?: string;
   "社員名"?: string;
   "日付"?: { start?: string; end?: string } | null;
   "シフト内容"?: string;
@@ -59,7 +61,7 @@ async function callGas(action: string, extra: Record<string, unknown> = {}, requ
   const response = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" }, // GAS doPostはContent-Typeに関わらずpostData.contentsを見るため、プリフライトを避けるtext/plainにしています
-    body: JSON.stringify({ action, shiftApiKey, ...extra })
+    body: JSON.stringify({ action, shiftApiKey, sessionToken: getShiftSession()?.token || "", ...extra })
   });
   if (!response.ok) {
     throw new Error("サーバーとの通信に失敗しました（status " + response.status + "）");
@@ -92,7 +94,7 @@ function buildShiftContent(shift: ShiftType, customShiftText?: string): string {
  */
 export async function fetchShiftsFromServer(existingEmployees: Employee[]): Promise<ShiftFetchResult | null> {
   try {
-    // 閲覧は全端末で利用できる公開API。保存系だけ接続キーを必須にします。
+    // 閲覧はログイン済みの全端末で利用でき、保存系は接続キーも必須です。
     const json = await callGas("getShifts", {}, false);
     const rows: ShiftRow[] = json.shifts || [];
 
@@ -105,12 +107,15 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
     // ただし「サーバーに同名データが無く、ローカルにもシフトが1件も無い」＝一度も使われていない
     // 仮の初期従業員（従業員A〜E など）は、サーバーにデータがある場合は表示から外します。
     const byName = new Map<string, Employee>();
+    const byId = new Map<string, Employee>();
     existingEmployees.forEach(emp => {
       const hasLocalShift = emp.shifts.some(s => s.shift || s.customShiftText || s.comment);
       if (serverNames.size > 0 && !serverNames.has(emp.name) && !hasLocalShift) {
         return; // 未使用の仮従業員はスキップ
       }
-      byName.set(emp.name, { ...emp, shifts: [] });
+      const clean = { ...emp, shifts: [] };
+      byName.set(emp.name, clean);
+      byId.set(emp.id, clean);
     });
 
     rows.forEach(row => {
@@ -118,14 +123,17 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
       if (!name) return;
       const dateStart = row["日付"]?.start;
       if (!dateStart) return;
-      if (!byName.has(name)) {
-        byName.set(name, {
-          id: Math.random().toString(36).substr(2, 9),
+      const employeeId = row["従業員ID"] || "";
+      if (!byName.has(name) && (!employeeId || !byId.has(employeeId))) {
+        const created = {
+          id: employeeId || Math.random().toString(36).substr(2, 9),
           name,
           shifts: []
-        });
+        };
+        byName.set(name, created);
+        byId.set(created.id, created);
       }
-      const emp = byName.get(name)!;
+      const emp = (employeeId && byId.get(employeeId)) || byName.get(name)!;
       const { shift, customShiftText } = parseShiftContent(row["シフト内容"] || "");
       const dayShift: DayShift = {
         date: dateStart,
@@ -199,6 +207,7 @@ export async function saveMonthToServer(
       ].join("-");
       const dayShift = shiftsByDate.get(date);
       rows.push({
+        "従業員ID": employee.id,
         "社員名": employee.name,
         "日付": date,
         "シフト内容": dayShift ? buildShiftContent(dayShift.shift, dayShift.customShiftText) : "",

@@ -1,18 +1,6 @@
 
 import { ShiftType } from "./types";
 
-// 編集者パスワード本体は公開コードに置かず、PBKDF2の照合値だけを保持します。
-const EDITOR_PASSWORD_SALT = "krguj8/UWxLxluA2AL/XOg==";
-const EDITOR_PASSWORD_VERIFIER = "n5Ma7rqe4snUzZ1xvPE1jIjXvVR5KuDeoybJ8L5ob3M=";
-
-export async function verifyEditorPassword(password: string): Promise<boolean> {
-  const bytes = (value: string) => Uint8Array.from(atob(value), char => char.charCodeAt(0));
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const result = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: bytes(EDITOR_PASSWORD_SALT), iterations: 210000, hash: "SHA-256" }, key, 256));
-  const expected = bytes(EDITOR_PASSWORD_VERIFIER);
-  return result.length === expected.length && result.every((value, index) => value === expected[index]);
-}
-
 export const SHIFT_OPTIONS: ShiftType[] = [
   "8:45～18:15",
   "8:30～18:00",
@@ -146,6 +134,8 @@ export const SPREADSHEET_FORMULAS = {
 export interface CycleWeekPattern {
   week1: ShiftType;
   week2: ShiftType;
+  week3: ShiftType;
+  week4: ShiftType;
 }
 // 配列のインデックスは JavaScript の Date.getDay() と同じ並び: 0=日,1=月,2=火,3=水,4=木,5=金,6=土
 export type CyclePattern = CycleWeekPattern[];
@@ -156,7 +146,7 @@ const wk = (mon: ShiftType, tue: ShiftType, wed: ShiftType, thu: ShiftType, fri:
   [sun, mon, tue, wed, thu, fri, sat];
 
 function buildPattern(week1: ShiftType[], week2: ShiftType[]): CyclePattern {
-  return week1.map((w1, i) => ({ week1: w1, week2: week2[i] }));
+  return week1.map((w1, i) => ({ week1: w1, week2: week2[i], week3: w1, week4: week2[i] }));
 }
 
 export const DEFAULT_CYCLE_PATTERNS: CyclePatterns = {

@@ -10,7 +10,7 @@ async function call(action: string, extra: Record<string, unknown> = {}) {
   const response = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action, shiftApiKey: localStorage.getItem(SHIFT_API_KEY_STORAGE) || "", ...extra })
+    body: JSON.stringify({ action, sessionToken: getShiftSession()?.token || "", shiftApiKey: localStorage.getItem(SHIFT_API_KEY_STORAGE) || "", ...extra })
   });
   if (!response.ok) throw new Error(`通信に失敗しました（${response.status}）`);
   const json = await response.json();
@@ -29,3 +29,4 @@ export async function saveCalendarPeriodSettings(settings: CalendarPeriodSetting
   const json = await call("saveShiftCalendarPeriodSettings", { settings });
   return { startDay: Number(json.settings.startDay), endDay: Number(json.settings.endDay) };
 }
+import { getShiftSession } from "./auth-sync";

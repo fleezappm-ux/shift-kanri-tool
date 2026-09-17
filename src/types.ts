@@ -47,6 +47,10 @@ export interface SpecialDayRule {
 export interface Employee {
   id: string;
   name: string;
+  displayName?: string;
+  displayOrder?: number;
+  active?: boolean;
+  aliases?: string[];
   shifts: DayShift[];
 }
 

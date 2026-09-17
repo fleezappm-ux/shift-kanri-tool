@@ -27,6 +27,7 @@ export const EMPLOYEE_DISPLAY_ORDER = ["降旗", "藤川", "金井", "本道", "
 
 export function sortEmployeesForDisplay(employees: Employee[]): Employee[] {
   return [...employees].sort((a, b) => {
+    if (a.displayOrder != null || b.displayOrder != null) return (a.displayOrder ?? 999) - (b.displayOrder ?? 999);
     const aIndex = EMPLOYEE_DISPLAY_ORDER.indexOf(a.name);
     const bIndex = EMPLOYEE_DISPLAY_ORDER.indexOf(b.name);
     if (aIndex < 0 && bIndex < 0) return 0;
@@ -110,7 +111,7 @@ export function HomeView({
             const isOff = label === "休み" || label === "有休";
             return (
               <button key={employee.id} className="home-roster-row" onClick={() => onEmployeeSelect(employee.id)}>
-                <span className="home-employee-name">{employee.name}</span>
+                <span className="home-employee-name">{employee.displayName || employee.name}</span>
                 <span className={`home-shift-value ${isOff ? "is-off" : ""}`}>{label}</span>
                 <span className="home-work-time">{shift?.shift && !isOff && shift.shift !== "任意入力" ? <><Clock3 className="w-3.5 h-3.5" /> 実働 {shift.workTime}</> : ""}</span>
                 <ChevronRight className="w-4 h-4 text-slate-300" />

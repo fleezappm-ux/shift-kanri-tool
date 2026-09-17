@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Employee, DayShift, ShiftType, GlobalRemark, LeaveRequest, LeaveRequestStatus, LeaveRequestType, SpecialDayRule } from "./types";
-import { SHIFT_OPTIONS, verifyEditorPassword, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
+import { SHIFT_OPTIONS, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateConfiguredDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, fetchShiftPeriodStatus, saveShiftPeriodStatus } from "./lib/shift-sync";
 import { getJapaneseHolidayDates } from "./lib/japanese-holidays";
@@ -68,10 +68,13 @@ import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
-import { getManagementApiKey, saveManagementApiKey } from "./lib/auth-sync";
-import { fetchPublishedDraft, PublishedDraft, publishShiftDraft, unpublishShiftDraft } from "./lib/draft-sync";
+import { getManagementApiKey, getShiftSession, logoutShiftSession, saveManagementApiKey, ShiftSession } from "./lib/auth-sync";
 import { DropdownMasterSettings } from "./components/DropdownMasterSettings";
 import { DEFAULT_STORE_MASTER, StoreMaster, StoreMasterSettings } from "./components/StoreMasterSettings";
+import { ShiftLogin } from "./components/ShiftLogin";
+import { EmployeeMasterSettings } from "./components/EmployeeMasterSettings";
+import { EmployeeMasterItem, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster } from "./lib/employee-master-sync";
+import { fetchCycleMaster, saveCycleMaster } from "./lib/cycle-master-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
@@ -95,6 +98,7 @@ function getCurrentShiftMonth(today = new Date(), settings = DEFAULT_CALENDAR_PE
 }
 
 export default function App() {
+  const [appSession, setAppSession] = useState<ShiftSession | null>(() => getShiftSession());
   const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations">("menu");
   const [storeMaster, setStoreMaster] = useState<StoreMaster>(() => {
     const saved = localStorage.getItem("store_master_settings");
@@ -131,6 +135,7 @@ export default function App() {
       shifts: []
     }));
   });
+  const [employeeMaster, setEmployeeMaster] = useState<EmployeeMasterItem[]>([]);
   const [globalRemarks, setGlobalRemarks] = useState<GlobalRemark[]>(() => {
     const saved = localStorage.getItem("global_remarks");
     if (saved) {
@@ -163,7 +168,6 @@ export default function App() {
     const savedTitle = localStorage.getItem("dashboard_title");
     return !savedTitle || savedTitle === "全体シフト集約" ? "全体シフト" : savedTitle;
   });
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [isFromAdmin, setIsFromAdmin] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
@@ -196,13 +200,20 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return { ...DEFAULT_CYCLE_PATTERNS, ...parsed };
+        const merged = { ...DEFAULT_CYCLE_PATTERNS, ...parsed } as CyclePatterns;
+        Object.values(merged).forEach(pattern => pattern.forEach(entry => { entry.week3 ??= entry.week1; entry.week4 ??= entry.week2; }));
+        return merged;
       } catch (e) {
         console.error("Failed to parse cycle patterns", e);
       }
     }
     return DEFAULT_CYCLE_PATTERNS;
   });
+  const [cycleLengths, setCycleLengths] = useState<Record<number, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("cycle_lengths") || "null") || { 1: 2, 2: 2, 3: 2, 4: 2, 5: 1, 6: 1, 7: 1 }; } catch { return { 1: 2, 2: 2, 3: 2, 4: 2, 5: 1, 6: 1, 7: 1 }; }
+  });
+  const [editingCycleId, setEditingCycleId] = useState<number | null>(null);
+  const [cycleSaving, setCycleSaving] = useState(false);
   const [syncState, setSyncState] = useState<"loading" | "saved" | "dirty" | "saving" | "offline">("loading");
   const [saveElapsedSeconds, setSaveElapsedSeconds] = useState(0);
   const [saveFeedback, setSaveFeedback] = useState<{
@@ -216,10 +227,6 @@ export default function App() {
   const [specialDayLoading, setSpecialDayLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [managementApiKey, setManagementApiKey] = useState(() => getManagementApiKey());
-  const [draftPublished, setDraftPublished] = useState(false);
-  const [draftPublishing, setDraftPublishing] = useState(false);
-  const [publishedDraft, setPublishedDraft] = useState<PublishedDraft | null>(null);
-  const [viewingPublishedDraft, setViewingPublishedDraft] = useState(false);
   const [dashboardListView, setDashboardListView] = useState(false);
   const [periodStatusLoading, setPeriodStatusLoading] = useState(false);
 
@@ -236,14 +243,16 @@ export default function App() {
   }, [syncState]);
 
   useEffect(() => {
+    if (!appSession?.token) return;
     let cancelled = false;
     fetchSpecialDayRules()
       .then(rules => { if (!cancelled) setSpecialDayRules(withDefaultSpecialDayRules(rules)); })
       .catch(error => console.error("特殊日設定の取得に失敗しました", error));
     return () => { cancelled = true; };
-  }, []);
+  }, [appSession?.token]);
 
   useEffect(() => {
+    if (!appSession?.token) return;
     let cancelled = false;
     fetchCalendarPeriodSettings()
       .then(settings => {
@@ -255,7 +264,7 @@ export default function App() {
       })
       .catch(error => console.error("カレンダー期間設定の取得に失敗しました", error));
     return () => { cancelled = true; };
-  }, []);
+  }, [appSession?.token]);
 
   useEffect(() => {
     const captureInstallPrompt = (event: Event) => {
@@ -266,13 +275,7 @@ export default function App() {
     return () => window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
   }, []);
 
-  // 編集モード（従業員マスター・個別シート編集・アプリ詳細設定）へ入るための簡易パスワードゲート。
-  // ブラウザのタブ/セッションを閉じるまで有効です（sessionStorageに保存）。
-  const [hasEditAccess, setHasEditAccess] = useState(() => sessionStorage.getItem("edit_access") === "granted");
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [editorName, setEditorName] = useState(() => sessionStorage.getItem("editor_name") || "");
-  const pendingEditActionRef = useRef<(() => void) | null>(null);
+  // 編集操作は、起動時に編集者用IDでログインしたセッションだけ許可します。
   const previousNavigationRef = useRef({ tab: "home", admin: false });
   const currentNavigationRef = useRef({ tab: activeTab, admin: isFromAdmin });
 
@@ -285,41 +288,18 @@ export default function App() {
   }, [activeTab, isFromAdmin]);
 
   const requestEditAccess = (action: () => void) => {
-    if (hasEditAccess) {
-      action();
-      return;
-    }
-    pendingEditActionRef.current = action;
-    setPasswordInput("");
-    setShowPasswordModal(true);
+    if (appSession?.role === "admin") return action();
+    toast.error("編集者用IDでログインし直してください");
   };
 
   // ページ再読み込み時、前回「アプリ詳細・環境設定」等の編集モードだった場合でも、
   // このセッションでまだパスワードを入力していなければ編集モードを解除します。
   useEffect(() => {
-    if (!hasEditAccess && isFromAdmin) {
+    if (appSession?.role !== "admin" && isFromAdmin) {
       setIsFromAdmin(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const submitEditPassword = async () => {
-    if (!editorName.trim()) {
-      toast.error("編集者名を入力してください");
-      return;
-    }
-    if (await verifyEditorPassword(passwordInput)) {
-      setHasEditAccess(true);
-      sessionStorage.setItem("edit_access", "granted");
-      sessionStorage.setItem("editor_name", editorName.trim());
-      setShowPasswordModal(false);
-      const action = pendingEditActionRef.current;
-      pendingEditActionRef.current = null;
-      setPasswordInput("");
-      void refreshLeaveRequests();
-      if (action) action();
-    } else toast.error("編集者パスワードが違います");
-  };
 
   // 保存先フォルダ（エクセル出力用）を覚えているか確認
   const [outputFolderName, setOutputFolderName] = useState<string | null>(null);
@@ -332,20 +312,6 @@ export default function App() {
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
-
-  useEffect(() => {
-    if (!dateRange.length) return;
-    fetchPublishedDraft(format(dateRange[0], "yyyy-MM-dd"))
-      .then(draft => {
-        const normalized = draft ? { ...draft, employees: draft.employees.map(employee => ({ ...employee, id: employees.find(local => local.name === employee.name)?.id || employee.id })) } : null;
-        setPublishedDraft(normalized);
-        setDraftPublished(Boolean(normalized?.published));
-        if (!normalized?.published) setViewingPublishedDraft(false);
-      })
-      .catch(() => { setPublishedDraft(null); setDraftPublished(false); setViewingPublishedDraft(false); });
-    // dateRangeはcurrentMonthKeyから決まるため、月が変わった時だけ取得します。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthKey]);
 
   const goHome = () => {
     setCurrentMonth(getCurrentShiftMonth(new Date(), calendarPeriodSettings));
@@ -392,7 +358,7 @@ export default function App() {
   const goBack = () => {
     const previous = previousNavigationRef.current;
     setActiveTab(previous.tab || "home");
-    setIsFromAdmin(previous.admin && hasEditAccess);
+    setIsFromAdmin(previous.admin && appSession?.role === "admin");
   };
 
   const getDateStr = (date: Date) => format(date, "yyyy-MM-dd");
@@ -409,8 +375,11 @@ export default function App() {
       const merged = await fetchShiftsFromServer(employees);
       if (!cancelled) {
         if (merged) {
+          const master = await fetchEmployeeMaster(merged.employees.map(employee => employee.name));
+          if (cancelled) return;
+          setEmployeeMaster(master);
           skipDirtyRef.current = true;
-          setEmployees(merged.employees);
+          setEmployees(master.length ? mergeEmployeesWithMaster(merged.employees, master) : merged.employees);
           // GAS更新前のDBには全体補足プロパティがないため、その間は端末内の既存補足を消さない。
           if (merged.supportsGlobalRemarks) {
             skipRemarkDirtyRef.current = true;
@@ -473,6 +442,18 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("cycle_patterns", JSON.stringify(cyclePatterns));
   }, [cyclePatterns]);
+  useEffect(() => { localStorage.setItem("cycle_lengths", JSON.stringify(cycleLengths)); }, [cycleLengths]);
+
+  useEffect(() => {
+    if (!appSession?.token) return;
+    fetchCycleMaster().then(master => {
+      if (!master) return;
+      setCycleNames(master.names);
+      setCycleLengths(master.lengths);
+      setCyclePatterns(master.patterns);
+      setCycleAssignments(master.assignments || {});
+    }).catch(error => console.error("クールマスターを取得できませんでした", error));
+  }, [appSession?.token]);
 
   useEffect(() => {
     localStorage.setItem("heatmap_enabled", String(heatmapEnabled));
@@ -525,8 +506,9 @@ export default function App() {
     anchorMonday.setHours(0, 0, 0, 0);
     const current = new Date(date); current.setHours(0, 0, 0, 0);
     const weeksDiff = Math.floor((current.getTime() - anchorMonday.getTime()) / (7 * 86400000));
-    const isWeek2 = ((weeksDiff % 2) + 2) % 2 === 1;
-    return resolveCycleShift(cyclePatterns, cycleType, date.getDay(), isWeek2);
+    const length = Math.max(1, Math.min(4, cycleLengths[cycleType] || 2));
+    const weekIndex = ((weeksDiff % length) + length) % length;
+    return resolveCycleShift(cyclePatterns, cycleType, date.getDay(), weekIndex);
   };
 
   const createNextMonthShifts = () => {
@@ -567,7 +549,7 @@ export default function App() {
   const dateRange = generateConfiguredDateRange(currentMonth.getFullYear(), currentMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
 
   useEffect(() => {
-    if (!dateRange.length) return;
+    if (!appSession?.token || !dateRange.length) return;
     let cancelled = false;
     setPeriodStatusLoading(true);
     fetchShiftPeriodStatus(getDateStr(dateRange[0]))
@@ -582,10 +564,10 @@ export default function App() {
     return () => { cancelled = true; };
     // dateRangeはcurrentMonthKeyと期間設定から決まります。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+  }, [appSession?.token, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   useEffect(() => {
-    if (!dateRange.length) return;
+    if (!appSession?.token || !dateRange.length) return;
     let cancelled = false;
     setLeaveRequestLoading(true);
     fetchLeaveRequests(getDateStr(dateRange[0]), getDateStr(dateRange[dateRange.length - 1]))
@@ -594,7 +576,7 @@ export default function App() {
       .finally(() => { if (!cancelled) setLeaveRequestLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+  }, [appSession?.token, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   const handleLeaveRequestSubmit = async (input: { employeeName: string; date: string; type: LeaveRequestType; comment: string }) => {
     if (!dateRange.length) return;
@@ -672,7 +654,7 @@ export default function App() {
     })).values()
   );
   const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
-  const dashboardEmployees = sortEmployeesForDisplay(viewingPublishedDraft && !isFromAdmin && publishedDraft ? publishedDraft.employees : employees);
+  const dashboardEmployees = sortEmployeesForDisplay(employees);
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];
@@ -721,27 +703,6 @@ export default function App() {
     } finally {
       setCalendarPeriodSaving(false);
     }
-  };
-
-  const handleToggleDraftPublication = async () => {
-    if (!dateRange.length) return;
-    setDraftPublishing(true);
-    try {
-      const periodStart = format(dateRange[0], "yyyy-MM-dd");
-      if (draftPublished) {
-        await unpublishShiftDraft(periodStart);
-        setDraftPublished(false);
-        setPublishedDraft(null);
-        setViewingPublishedDraft(false);
-        toast.success("シフト案を非公開にしました");
-      } else {
-        await publishShiftDraft(employees, displayRemarks, periodStart, format(dateRange[dateRange.length - 1], "yyyy-MM-dd"));
-        setDraftPublished(true);
-        setPublishedDraft(await fetchPublishedDraft(periodStart));
-        toast.success("現在のシフト案を従業員へ公開しました");
-      }
-    } catch (error) { toast.error(error instanceof Error ? error.message : "公開状態を変更できませんでした"); }
-    finally { setDraftPublishing(false); }
   };
 
   // 表示中の期間について、日曜・祝日・年末年始をファーマシーOS側の判定ロジックで自動取得し、
@@ -797,13 +758,7 @@ export default function App() {
 
   const saveCurrentMonth = async () => {
     if (syncState === "saving" || dateRange.length === 0) return;
-    const savingEditor = editorName.trim() || window.prompt("Notionへ保存する人の名前を入力してください")?.trim() || "";
-    if (!savingEditor) {
-      toast.error("保存者名が必要です");
-      return;
-    }
-    setEditorName(savingEditor);
-    sessionStorage.setItem("editor_name", savingEditor);
+    const savingEditor = "シフト編集者";
     setSyncState("saving");
     setSaveFeedback({ kind: "saving", message: "Notionへ保存しています。この画面を閉じずにお待ちください" });
     try {
@@ -903,9 +858,11 @@ export default function App() {
     }));
   };
 
-  const renameEmployee = (id: string, newName: string) => {
-    setEmployees(prev => prev.map(emp => emp.id === id ? { ...emp, name: newName } : emp));
-    toast.success("名前を変更しました");
+  const handleSaveEmployeeMaster = async (items: EmployeeMasterItem[]) => {
+    const saved = await saveEmployeeMaster(items);
+    setEmployeeMaster(saved);
+    skipDirtyRef.current = true;
+    setEmployees(mergeEmployeesWithMaster(employees, saved));
   };
 
   const handleCustomTimeChange = (employeeId: string, date: string, field: "breakTime" | "workTime", value: string) => {
@@ -987,9 +944,9 @@ export default function App() {
         const dayOfWeek = date.getDay();
         const msDiff = date.getTime() - week1Mon.getTime();
         const weeksDiff = Math.floor(msDiff / (7 * 24 * 60 * 60 * 1000));
-        const isWeek2 = weeksDiff % 2 === 1;
-
-        const shift: ShiftType = resolveCycleShift(cyclePatterns, cycleType, dayOfWeek, isWeek2);
+        const length = Math.max(1, Math.min(4, cycleLengths[cycleType] || 2));
+        const weekIndex = ((weeksDiff % length) + length) % length;
+        const shift: ShiftType = resolveCycleShift(cyclePatterns, cycleType, dayOfWeek, weekIndex);
 
         if (shift) {
           const { breakTime, workTime } = calculateTimes(shift);
@@ -1107,6 +1064,35 @@ export default function App() {
 
   const renameCycle = (num: number, name: string) => {
     setCycleNames(prev => ({ ...prev, [num]: name }));
+  };
+
+  const addCycle = () => {
+    const nextId = Math.max(0, ...Object.keys(cycleNames).map(Number)) + 1;
+    const blank = Array.from({ length: 7 }, () => ({ week1: "休み" as ShiftType, week2: "休み" as ShiftType, week3: "休み" as ShiftType, week4: "休み" as ShiftType }));
+    setCycleNames(previous => ({ ...previous, [nextId]: `クール${nextId}` }));
+    setCyclePatterns(previous => ({ ...previous, [nextId]: blank }));
+    setCycleLengths(previous => ({ ...previous, [nextId]: 1 }));
+    setEditingCycleId(nextId);
+  };
+
+  const deleteCycle = (cycleId: number) => {
+    if (Object.keys(cycleNames).length <= 1) return toast.error("クールは最低1件必要です");
+    if (!window.confirm(`${cycleNames[cycleId]}を削除しますか？`)) return;
+    setCycleNames(previous => { const next = { ...previous }; delete next[cycleId]; return next; });
+    setCyclePatterns(previous => { const next = { ...previous }; delete next[cycleId]; return next; });
+    setCycleLengths(previous => { const next = { ...previous }; delete next[cycleId]; return next; });
+    setCycleAssignments(previous => Object.fromEntries(Object.entries(previous).filter(([, assignment]) => (assignment as { cycleType: number }).cycleType !== cycleId)) as Record<string, { cycleType: number; anchorDate: string }>);
+    setEditingCycleId(value => value === cycleId ? null : value);
+  };
+
+  const handleSaveCycleMaster = async () => {
+    setCycleSaving(true);
+    try {
+      const saved = await saveCycleMaster({ names: cycleNames, lengths: cycleLengths, patterns: cyclePatterns, assignments: cycleAssignments });
+      setCycleNames(saved.names); setCycleLengths(saved.lengths); setCyclePatterns(saved.patterns); setCycleAssignments(saved.assignments || {});
+      toast.success("クールマスターを全端末へ保存しました");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "クールマスターを保存できませんでした"); }
+    finally { setCycleSaving(false); }
   };
 
   const clearMonthShifts = () => {
@@ -1310,7 +1296,7 @@ export default function App() {
 
     // 2. 各個人のシートを作成
     exportEmployees.forEach(emp => {
-      const empSheet = workbook.addWorksheet(emp.name);
+      const empSheet = workbook.addWorksheet(emp.displayName || emp.name);
       empSheet.pageSetup = { 
         paperSize: 9, 
         orientation: 'portrait', 
@@ -1320,7 +1306,7 @@ export default function App() {
         margins: { left: 0.5, right: 0.5, top: 0.5, bottom: 0.5, header: 0, footer: 0 }
       };
       
-      const empTitleRow = empSheet.addRow([`${emp.name} 様 シフト表`]);
+      const empTitleRow = empSheet.addRow([`${emp.displayName || emp.name} 様 シフト表`]);
       empTitleRow.font = { size: 14, bold: true };
       empSheet.mergeCells(1, 1, 1, 5);
       
@@ -1477,6 +1463,8 @@ export default function App() {
     const dateStr = getDateStr(date);
     return employee.shifts.find(s => s.date.startsWith(dateStr));
   };
+
+  if (!appSession) return <><ShiftLogin onLogin={session => { setAppSession(session); toast.success(session.role === "admin" ? "編集者としてログインしました" : "ログインしました"); }} /><Toaster position="top-center" /></>;
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="shift-shell flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
@@ -1681,6 +1669,9 @@ export default function App() {
         </div>
 
         <div className="mt-auto pt-6 space-y-2">
+          <Button variant="ghost" className="w-full justify-start text-slate-500" onClick={() => { logoutShiftSession(); setAppSession(null); setActiveTab("home"); setIsFromAdmin(false); }}>
+            ログアウト
+          </Button>
           <Button
             className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
             onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })}
@@ -1826,7 +1817,7 @@ export default function App() {
                 value={emp.id} 
                 className="px-5 py-2 text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
               >
-                {emp.name}
+                {emp.displayName || emp.name}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -1894,15 +1885,6 @@ export default function App() {
               <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={createNextMonthShifts}>
                 <PlusCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />翌月シフト作成（自動）
               </Button>
-              <Button
-                disabled={draftPublishing}
-                variant={draftPublished ? "destructive" : "outline"}
-                size="sm"
-                className="h-8 text-[10px] font-bold bg-white"
-                onClick={handleToggleDraftPublication}
-              >
-                {draftPublishing ? "処理中…" : draftPublished ? "案を非公開" : "案を公開"}
-              </Button>
               {showClearConfirm ? (
                 <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
                   <span className="text-[10px] font-bold text-red-600 px-2">全消去しますか？</span>
@@ -1959,7 +1941,7 @@ export default function App() {
                 onInstall={installToHomeScreen}
               />
             ) : activeTab === "requests" ? (
-              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} onAuthenticated={refreshLeaveRequests} />
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
@@ -1973,23 +1955,10 @@ export default function App() {
                   <CardHeader className="dashboard-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 group">
-                        {isEditingTitle ? (
-                          <Input 
-                            value={dashboardTitle}
-                            onChange={(e) => setDashboardTitle(e.target.value)}
-                            onBlur={() => setIsEditingTitle(false)}
-                            onKeyDown={(e) => e.key === "Enter" && setIsEditingTitle(false)}
-                            className="text-base font-bold h-8 max-w-[300px]"
-                            autoFocus
-                          />
-                        ) : (
-                          <CardTitle className="text-base flex items-center gap-2">
-                            {dashboardTitle}
-                            <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => setIsEditingTitle(true)}>
-                              <FileCode className="w-3 h-3" />
-                            </Button>
-                          </CardTitle>
-                        )}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <CardTitle className="text-xl font-black">{dashboardTitle}</CardTitle>
+                          <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
+                        </div>
                       </div>
                       <CardDescription className="dashboard-period-label">
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy/MM/dd")} - ${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}
@@ -2002,12 +1971,8 @@ export default function App() {
                         className="dashboard-list-toggle h-8 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800"
                         onClick={() => setDashboardListView(value => !value)}
                       >
-                        <Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "30日一覧"}
+                        <Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示に戻す" : "一覧表示"}
                       </Button>
-                      <Badge className={viewingPublishedDraft ? "bg-blue-600 text-white border-0" : isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{viewingPublishedDraft ? "公開中のシフト案" : periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
-                      <Badge className={draftPublished ? "bg-emerald-500 text-white border-0" : "bg-white text-slate-600 border border-white/70"}>{draftPublished ? "公開中" : "非公開"}</Badge>
-                      {!isFromAdmin && publishedDraft?.published && <Button variant="outline" size="sm" className="h-8 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800" onClick={() => setViewingPublishedDraft(value => !value)}>{viewingPublishedDraft ? "確定版を見る" : "公開案を見る"}</Button>}
-                      {isFromAdmin && <Badge className="bg-blue-600 text-white border-0">{editorName}さんが編集中</Badge>}
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 md:flex-1 md:min-h-0 md:flex md:flex-col">
@@ -2023,7 +1988,7 @@ export default function App() {
                               key={employee.id}
                               onClick={() => { setActiveTab(employee.id); setIsFromAdmin(true); }}
                             >
-                              {employee.name}<ChevronRight className="w-4 h-4" />
+                              {employee.displayName || employee.name}<ChevronRight className="w-4 h-4" />
                             </button>
                           ))}
                         </div>
@@ -2041,7 +2006,7 @@ export default function App() {
                         }}
                       >
                         <option value="">名前を選択</option>
-                        {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                        {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}
                       </select>
                     </div>}
                     {isFromAdmin && <LeaveRequestManager requests={leaveRequests} loading={leaveRequestLoading} onStatusChange={handleLeaveRequestStatus} />}
@@ -2056,9 +2021,9 @@ export default function App() {
                                 <button
                                   className="dashboard-employee-link"
                                   onClick={() => { setActiveTab(emp.id); setIsFromAdmin(false); }}
-                                  title={`${emp.name}さんの個人シフトを見る`}
+                                  title={`${emp.displayName || emp.name}さんの個人シフトを見る`}
                                 >
-                                  {emp.name}<ChevronRight className="w-3 h-3" />
+                                  {emp.displayName || emp.name}<ChevronRight className="w-3 h-3" />
                                 </button>
                               </TableHead>
                             ))}
@@ -2239,131 +2204,23 @@ export default function App() {
                         </div>
                         <p className="text-[11px] text-slate-500">従業員は共通の従業員ID・パスワードでログイン後、自分の名前を選んで希望を提出します。</p>
                       </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">従業員マスター（名前の変更・個別シート編集）</h4>
-                          <Badge variant="outline" className="text-[10px] font-medium border-slate-200 text-slate-400">
-                            クリックで個別シート編集
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {dashboardEmployees.map(emp => (
-                            <div key={emp.id} className="flex gap-2">
-                              <Input 
-                                defaultValue={emp.name}
-                                onBlur={(e) => renameEmployee(emp.id, e.target.value)}
-                                className="h-10 text-sm bg-white border-slate-200 focus:border-primary/50 rounded-xl flex-1"
-                                placeholder="従業員名"
-                              />
-                              <Button 
-                                variant="outline" 
-                                size="icon"
-                                className="h-10 w-10 shrink-0 rounded-xl border-slate-200 hover:bg-slate-50 hover:text-primary transition-colors"
-                                title="この従業員のシートを詳しく編集"
-                                onClick={() => {
-                                  setActiveTab(emp.id);
-                                  setIsFromAdmin(true);
-                                }}
-                              >
-                                <ChevronRight className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <EmployeeMasterSettings employees={employeeMaster} onSave={handleSaveEmployeeMaster} />
 
-                      <div className="mobile-cycle-notice">
-                        <strong>クール内容の変更はPC版で行ってください</strong>
-                        <span>曜日ごとの勤務時間は項目数が多いため、スマホでは誤操作防止のため非表示にしています。</span>
-                      </div>
-
-                      <div className="desktop-cycle-editor pt-6 border-t border-slate-100">
-                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">クール名のカスタマイズ</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {[1, 2, 3, 4, 5, 6, 7].map(num => (
-                            <div key={num} className="flex items-center shadow-sm">
-                              <div className="w-10 h-10 flex items-center justify-center bg-slate-100 text-[10px] font-bold text-slate-500 rounded-l-xl border-y border-l border-slate-200">{num}</div>
-                              <Input 
-                                value={cycleNames[num]}
-                                onChange={(e) => renameCycle(num, e.target.value)}
-                                className="h-10 text-sm rounded-l-none rounded-r-xl bg-white border-slate-200"
-                                placeholder={`クール${num}`}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="desktop-cycle-editor pt-6 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">クール内容の編集（曜日ごとの勤務時間）</h4>
-                        </div>
-                        <div className="space-y-6">
-                          {[1, 2, 3, 4, 5, 6, 7].map(num => (
-                            <div key={num} className="border border-slate-200 rounded-xl p-4 bg-white">
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-xs font-bold text-slate-700">{num}. {cycleNames[num]}</span>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 text-[10px] px-2"
-                                    onClick={() => reapplyCycleToCurrentMonth(num)}
-                                  >
-                                    この変更を今月に適用
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-[10px] px-2"
-                                    onClick={() => {
-                                      setCyclePatterns(prev => {
-                                        const pattern = prev[num].map(entry => ({ ...entry, week2: entry.week1 }));
-                                        return { ...prev, [num]: pattern };
-                                      });
-                                      toast.success("週1の内容を週2にコピーしました");
-                                    }}
-                                  >
-                                    週1を週2にコピー
-                                  </Button>
-                                </div>
-                              </div>
-                              {(["week1", "week2"] as const).map(weekKey => (
-                                <div key={weekKey} className="grid grid-cols-7 gap-1.5 mb-1.5">
-                                  {["日", "月", "火", "水", "木", "金", "土"].map((label, dayIdx) => (
-                                    <div key={dayIdx} className="flex flex-col gap-1">
-                                      <span className="text-[9px] text-center text-muted-foreground">{weekKey === "week1" ? "週1" : "週2"}{label}</span>
-                                      <Select
-                                        value={cyclePatterns[num][dayIdx][weekKey]}
-                                        onValueChange={(val) => {
-                                          setCyclePatterns(prev => {
-                                            const pattern = [...prev[num]];
-                                            pattern[dayIdx] = { ...pattern[dayIdx], [weekKey]: val as ShiftType };
-                                            return { ...prev, [num]: pattern };
-                                          });
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-8 text-[10px] px-1.5">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="">なし</SelectItem>
-                                          {SHIFT_OPTIONS.filter(o => o !== "任意入力").map(opt => (
-                                            <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                  ))}
-                                </div>
-                              ))}
-                              <p className="text-[10px] text-muted-foreground mt-1">
-                                {num >= 5 ? "このクールは週1・週2を同じ内容にしておくと、隔週の切り替えなしで毎週同じパターンになります。" : ""}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <div className="mb-4 flex items-center justify-between gap-3"><div><h4 className="font-black text-slate-900">クールマスター</h4><p className="mt-1 text-xs text-slate-500">1〜4週間の勤務パターンを登録します。編集するクールだけを開きます。</p></div><Button variant="outline" onClick={addCycle}><PlusCircle className="mr-1 h-4 w-4" />クール追加</Button></div>
+                        <div className="space-y-3">{Object.keys(cycleNames).map(Number).sort((a, b) => a - b).map(num => {
+                          const isOpen = editingCycleId === num;
+                          const length = cycleLengths[num] || 2;
+                          return <div key={num} className="rounded-xl border border-slate-200 bg-white p-4">
+                            <div className="flex flex-wrap items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-sm font-black">{num}</span><strong className="min-w-0 flex-1 text-sm">{cycleNames[num]}</strong><Badge variant="outline">{length}週間</Badge><Button variant="outline" size="sm" onClick={() => setEditingCycleId(isOpen ? null : num)}>{isOpen ? "閉じる" : "編集"}</Button><Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteCycle(num)}>削除</Button></div>
+                            {isOpen && <div className="mt-4 border-t pt-4">
+                              <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]"><label><span className="mb-1 block text-xs font-bold text-slate-600">クール名</span><Input value={cycleNames[num]} onChange={event => renameCycle(num, event.target.value)} /></label><label><span className="mb-1 block text-xs font-bold text-slate-600">周期</span><select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={length} onChange={event => setCycleLengths(previous => ({ ...previous, [num]: Number(event.target.value) }))}>{[1,2,3,4].map(value => <option key={value} value={value}>{value}週間</option>)}</select></label><Button className="self-end" variant="outline" onClick={() => reapplyCycleToCurrentMonth(num)}>表示期間へ適用</Button></div>
+                              <div className="space-y-3 overflow-x-auto">{Array.from({ length }, (_, weekIndex) => { const weekKey = `week${weekIndex + 1}` as "week1" | "week2" | "week3" | "week4"; return <div key={weekKey} className="min-w-[760px]"><strong className="mb-2 block text-xs text-blue-700">第{weekIndex + 1}週</strong><div className="grid grid-cols-7 gap-2">{["日", "月", "火", "水", "木", "金", "土"].map((label, dayIdx) => <label key={label} className="text-center"><span className="mb-1 block text-[10px] font-bold text-slate-500">{label}</span><select className="h-10 w-full rounded-lg border bg-white px-2 text-xs" value={cyclePatterns[num]?.[dayIdx]?.[weekKey] || ""} onChange={event => setCyclePatterns(previous => { const pattern = [...previous[num]]; pattern[dayIdx] = { ...pattern[dayIdx], [weekKey]: event.target.value as ShiftType }; return { ...previous, [num]: pattern }; })}><option value="">なし</option>{SHIFT_OPTIONS.filter(option => option !== "任意入力").map(option => <option key={option} value={option}>{option}</option>)}</select></label>)}</div></div>; })}</div>
+                            </div>}
+                          </div>;
+                        })}</div>
+                        <Button className="mt-4 h-11 w-full font-bold" disabled={cycleSaving} onClick={() => void handleSaveCycleMaster()}>{cycleSaving ? "保存中…" : "クールマスターを保存"}</Button>
+                      </section>
 
                       <div className="pt-6 border-t border-slate-100">
                         <div className="flex items-center justify-between gap-4">
@@ -2433,7 +2290,7 @@ export default function App() {
               </motion.div>
             ) : (
               (() => {
-                const emp = (viewingPublishedDraft && !isFromAdmin && publishedDraft ? publishedDraft.employees : employees).find(e => e.id === activeTab);
+                const emp = employees.find(e => e.id === activeTab);
                 if (!emp) return null;
                 return (
                   <motion.div
@@ -2447,15 +2304,7 @@ export default function App() {
                       <CardHeader className="employee-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
                         <div>
                           <div className="flex items-center gap-2 group">
-                            {isFromAdmin ? (
-                              <Input 
-                                defaultValue={emp.name}
-                                onBlur={(e) => renameEmployee(emp.id, e.target.value)}
-                                className="text-base font-bold h-8 max-w-[200px]"
-                              />
-                            ) : (
-                              <CardTitle className="text-base">{emp.name} の個人シート</CardTitle>
-                            )}
+                            <CardTitle className="text-base">{emp.displayName || emp.name} の個人シート</CardTitle>
                           </div>
                           <CardDescription className="text-xs">シフトの入力と休憩・実働時間の確認</CardDescription>
                         </div>
@@ -2505,7 +2354,7 @@ export default function App() {
                           <div className="mobile-employee-picker">
                             <span>編集する人</span>
                             <select value={emp.id} onChange={(event) => setActiveTab(event.target.value)}>
-                              {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                              {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}
                             </select>
                             <Button
                               disabled={periodStatusLoading}
@@ -2573,7 +2422,7 @@ export default function App() {
                                                 </Button>
                                               </DropdownMenuTrigger>
                                               <DropdownMenuContent align="end" className="bg-white border-border shadow-xl z-50 min-w-[140px]">
-                                                {[1, 2, 3, 4, 5, 6, 7].map(num => (
+                                                {Object.keys(cycleNames).map(Number).sort((a, b) => a - b).map(num => (
                                                   <DropdownMenuItem 
                                                     key={num} 
                                                     className="text-xs cursor-pointer py-2 border-b border-border/30 last:border-0" 
@@ -2737,44 +2586,6 @@ export default function App() {
         </div>
       )}
       <Toaster position="top-center" />
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-800">管理者ログイン</h3>
-            <p className="text-xs text-muted-foreground">
-              管理薬剤師・SE兼任管理薬剤師・開設者のみ入力してください。
-            </p>
-            <Input
-              value={editorName}
-              onChange={(e) => setEditorName(e.target.value)}
-              placeholder="編集者名（例：降旗）"
-              className="h-10 text-sm"
-            />
-            <Input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submitEditPassword(); }}
-              placeholder="パスワードを入力"
-              autoComplete="current-password"
-              className="h-10 text-sm"
-            />
-            <p className="text-[11px] font-bold text-blue-700">編集者パスワード：従来と同じものを入力してください</p>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="h-9 text-xs"
-              onClick={() => { setShowPasswordModal(false); pendingEditActionRef.current = null; setPasswordInput(""); }}
-              >
-                キャンセル
-              </Button>
-              <Button className="h-9 text-xs" onClick={submitEditPassword}>
-                確認
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </Tabs>
   );
 }

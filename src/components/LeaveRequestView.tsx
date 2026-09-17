@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale/ja";
-import { CalendarDays, CheckCircle2, LogIn, LogOut, Send, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, Send, Trash2 } from "lucide-react";
 import { Employee, GlobalRemark, LeaveRequest, LeaveRequestType } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getEmployeeSession, loginEmployee, logoutEmployee, ShiftSession } from "../lib/auth-sync";
-import { toast } from "sonner";
 
 const TYPES: LeaveRequestType[] = ["有給希望", "休み希望", "午前休希望", "午後休希望"];
 
@@ -19,15 +17,10 @@ interface Props {
   loading: boolean;
   onSubmit: (input: { employeeName: string; date: string; type: LeaveRequestType; comment: string }) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
-  onAuthenticated: () => Promise<void>;
 }
 
-export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, onSubmit, onCancel, onAuthenticated }: Props) {
-  const [session, setSession] = useState<ShiftSession | null>(() => getEmployeeSession());
+export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, onSubmit, onCancel }: Props) {
   const [employeeName, setEmployeeName] = useState("");
-  const [loginId, setLoginId] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [type, setType] = useState<LeaveRequestType>("有給希望");
   const [comment, setComment] = useState("");
@@ -38,20 +31,6 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
     if (!employeeName || !selectedDate) return;
     await onSubmit({ employeeName, date: selectedDate, type, comment });
     setComment("");
-  };
-
-  const signIn = async () => {
-    if (!loginId.trim() || !loginPassword) return toast.error("従業員IDとパスワードを入力してください");
-    setLoginLoading(true);
-    try {
-      const next = await loginEmployee(loginId.trim(), loginPassword);
-      setSession(next);
-      setLoginPassword("");
-      await onAuthenticated();
-      toast.success("従業員としてログインしました");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "ログインできませんでした");
-    } finally { setLoginLoading(false); }
   };
 
   return (
@@ -67,20 +46,13 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           <span>{locked ? "確定済みのため新しい希望は提出できません" : `${format(dates[0], "yyyy/M/d")}〜${format(dates[dates.length - 1], "M/d")}`}</span>
         </div>
 
-        {!session ? <div className="leave-login-box">
-          <label className="leave-field-label">従業員ID</label>
-          <Input value={loginId} onChange={event => setLoginId(event.target.value)} placeholder="従業員IDを入力" autoComplete="username" className="h-11" />
-          <label className="leave-field-label">従業員パスワード</label>
-          <Input type="password" value={loginPassword} onChange={event => setLoginPassword(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void signIn(); }} placeholder="パスワードを入力" autoComplete="current-password" className="h-11" />
-          <Button className="w-full h-11 font-bold" disabled={loginLoading} onClick={signIn}><LogIn className="w-4 h-4 mr-2" />ログイン</Button>
-        </div> : <><div className="leave-login-status"><strong>従業員ログイン</strong><span>ログイン中</span><button onClick={() => { logoutEmployee(); setSession(null); setEmployeeName(""); }}><LogOut className="w-4 h-4" />ログアウト</button></div>
-          <label className="leave-field-label">あなたの名前</label>
+        <><label className="leave-field-label">あなたの名前</label>
           <select className="leave-native-select" value={employeeName} onChange={event => setEmployeeName(event.target.value)}>
             <option value="">名前を選択してください</option>
-            {employees.map(employee => <option key={employee.id} value={employee.name}>{employee.name}</option>)}
-          </select></>}
+            {employees.map(employee => <option key={employee.id} value={employee.displayName || employee.name}>{employee.displayName || employee.name}</option>)}
+          </select></>
 
-        {session && employeeName && !locked && <>
+        {employeeName && !locked && <>
           <label className="leave-field-label">希望日をタップ</label>
           <div className="leave-calendar-grid">
             {dates.map(date => {
@@ -104,7 +76,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
         </>}
       </section>
 
-      {session && employeeName && <section className="leave-request-card">
+      {employeeName && <section className="leave-request-card">
         <h2>提出した希望</h2>
         {mine.length === 0 ? <p className="leave-empty">まだ提出されていません</p> : <div className="leave-submitted-list">
           {mine.map(item => <div key={item.id}>
@@ -114,7 +86,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           </div>)}
         </div>}
       </section>}
-      <p className="leave-auth-note">従業員用ログイン後、自分の名前を選んで希望を提出してください。</p>
+      <p className="leave-auth-note">自分の名前を選んで希望を提出してください。</p>
     </div>
   );
 }

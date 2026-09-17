@@ -1,6 +1,6 @@
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
 
-const EMPLOYEE_TOKEN_KEY = "shift_employee_session";
+const SESSION_KEY = "shift_app_session";
 const API_KEY_KEY = "shift_api_key";
 
 export interface ShiftSession {
@@ -36,16 +36,25 @@ function readSession(key: string): ShiftSession | null {
   }
 }
 
-export const getEmployeeSession = () => readSession(EMPLOYEE_TOKEN_KEY);
-export const getEmployeeToken = () => getEmployeeSession()?.token || "";
+export const getShiftSession = () => readSession(SESSION_KEY);
+export const getEmployeeSession = getShiftSession;
+export const getEmployeeToken = () => getShiftSession()?.token || "";
 export const getManagementApiKey = () => localStorage.getItem(API_KEY_KEY) || "";
 export const saveManagementApiKey = (value: string) => localStorage.setItem(API_KEY_KEY, value.trim());
 
 export async function loginEmployee(loginId: string, password: string): Promise<ShiftSession> {
   const json = await call("loginShiftEmployee", { loginId, password });
   const session = json.session as ShiftSession;
-  localStorage.setItem(EMPLOYEE_TOKEN_KEY, JSON.stringify(session));
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
-export function logoutEmployee() { localStorage.removeItem(EMPLOYEE_TOKEN_KEY); }
+export async function loginEditor(loginId: string, password: string): Promise<ShiftSession> {
+  const json = await call("loginShiftAdmin", { loginId, password });
+  const session = json.session as ShiftSession;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+export function logoutShiftSession() { localStorage.removeItem(SESSION_KEY); }
+export const logoutEmployee = logoutShiftSession;

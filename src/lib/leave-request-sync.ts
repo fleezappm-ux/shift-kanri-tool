@@ -1,5 +1,5 @@
 import { LeaveRequest, LeaveRequestStatus, LeaveRequestType } from "../types";
-import { getEmployeeToken, getManagementApiKey } from "./auth-sync";
+import { getEmployeeToken, getManagementApiKey, getShiftSession } from "./auth-sync";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
 const SHIFT_API_KEY_STORAGE = "shift_api_key";
@@ -10,7 +10,7 @@ async function request(action: string, payload: Record<string, unknown>, require
   const response = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action, shiftApiKey, ...payload })
+    body: JSON.stringify({ action, sessionToken: getShiftSession()?.token || "", shiftApiKey, ...payload })
   });
   if (!response.ok) throw new Error(`通信に失敗しました（${response.status}）`);
   const json = await response.json();

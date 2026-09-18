@@ -46,7 +46,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
     <div className="leave-request-page space-y-4 pb-5">
       <header className="leave-request-hero">
         <div className="leave-request-title"><span>SHIFT REQUEST</span><h1>休み希望を提出</h1><p>希望受付中のシフト案に申請します</p></div>
-        <div className="leave-request-months"><small>希望を出す月</small><div>{monthOptions.map(month => <Button key={month.key} className={month.key === currentMonthKey ? "is-current" : ""} variant="outline" onClick={() => onMonthSelect(month.key)}>{month.label}</Button>)}</div></div>
+        <div className="leave-request-months"><small>希望を出す月</small><div>{monthOptions.map(month => <Button key={month.key} className={month.key === currentMonthKey ? "is-current" : ""} variant="outline" onClick={() => { setSelectedDate(""); setConfirming(false); onMonthSelect(month.key); }}>{month.label}</Button>)}</div></div>
         <CalendarDays className="leave-request-icon w-9 h-9" />
       </header>
 
@@ -54,7 +54,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
         <><label className="leave-field-label">操作員</label><div className="rounded-xl bg-slate-100 p-3 text-sm font-black">{employeeName || "未選択"}</div></>
         <p className="leave-status-guide">確定シフトは黒、未確定のシフト案は白で表示されます。確定シフトは変更・希望提出できません。現在の表示期間：{format(dates[0], "yyyy/M/d")}〜{format(dates[dates.length - 1], "M/d")}</p>
 
-        {employeeName && !locked && <>
+        {employeeName && <>
           <label className="leave-field-label">希望日をタップ</label>
           <div className="leave-calendar-grid">
             {dates.map(date => {
@@ -62,12 +62,13 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
               const existing = requestByDate.get(key);
               const remark = remarks.find(item => item.date === key);
               const color = remark?.color || (date.getDay() === 0 || remark?.type === "祝日" || remark?.type === "店休日" ? "red" : "");
-              return <button key={key} className={`${selectedDate === key ? "is-selected" : ""} ${existing ? "has-request" : ""} ${color ? `special-${color}` : ""}`} onClick={() => setSelectedDate(key)} title={remark?.type}>
+              return <button key={key} disabled={locked} className={`${selectedDate === key ? "is-selected" : ""} ${existing ? "has-request" : ""} ${locked ? "is-locked" : ""} ${color ? `special-${color}` : ""}`} onClick={() => setSelectedDate(key)} title={locked ? "確定シフトのため選択できません" : remark?.type}>
                 <small>{format(date, "E", { locale: ja })}</small><strong>{format(date, "d")}</strong>{remark && <em>{remark.type}</em>}{existing && <span>希望済</span>}
               </button>;
             })}
           </div>
 
+          {!locked && <>
           <label className="leave-field-label">希望内容</label>
           <div className="leave-type-grid">
             {TYPES.map(value => <button key={value} className={type === value ? "is-selected" : ""} onClick={() => setType(value)}>{value}</button>)}
@@ -77,6 +78,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           {confirming && <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 text-sm"><strong>提出内容を確認してください</strong><p className="mt-2">{employeeName}／{selectedDate}／{type}</p>{comment && <p className="mt-1">{comment}</p>}<p className="mt-1 text-xs text-slate-500">公開範囲：{commentVisibility === "all" ? "全員" : "編集者のみ"}</p></div>}
           <Button className="w-full h-12 font-bold" disabled={!selectedDate || loading} onClick={submit}><Send className="w-4 h-4 mr-2" />{confirming ? "提出する" : "提出内容を確認"}</Button>
           <Button variant="outline" className="w-full h-11 font-bold" disabled={loading || mine.some(item => item.type === "希望なし")} onClick={() => onSubmit({ employeeId: operatorId, employeeName, date: "", type: "希望なし", comment: "", commentVisibility: "all" })}><CheckCircle2 className="w-4 h-4 mr-2" />この月は希望なし</Button>
+          </>}
         </>}
       </section>
 

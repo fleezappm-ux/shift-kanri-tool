@@ -2402,6 +2402,15 @@ export default function App() {
               (() => {
                 const emp = employees.find(e => e.id === activeTab);
                 if (!emp) return null;
+                const periodShifts = emp.shifts.filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))));
+                const attendanceDays = periodShifts.filter(s => s.shift && s.shift !== "休み" && s.shift !== "有休").length;
+                const totalWorkHours = periodShifts.reduce((acc, s) => {
+                  if (!s.workTime || !s.workTime.includes(":")) return acc;
+                  const [h, m] = s.workTime.split(":").map(Number);
+                  if (isNaN(h) || isNaN(m)) return acc;
+                  return acc + h + m / 60;
+                }, 0).toFixed(1);
+                const paidLeaveDays = periodShifts.filter(s => s.shift === "有休").length;
                 return (
                   <motion.div
                     key={emp.id}
@@ -2416,48 +2425,8 @@ export default function App() {
                           <div className="flex items-center gap-2 group">
                             <CardTitle className="text-base">{emp.displayName || emp.name} の個人シート</CardTitle>
                           </div>
-                          <CardDescription className="text-xs">シフトの入力と休憩・実働時間の確認</CardDescription>
                         </div>
-                        <div className="employee-stats flex items-center gap-4">
-                          <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold">出勤日数</span>
-                            <Badge variant="secondary" className="bg-slate-50 text-slate-700 border-slate-100 font-bold">
-                              {
-                                emp.shifts
-                                  .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                  .filter(s => s.shift && s.shift !== "休み" && s.shift !== "有休")
-                                  .length
-                              }日
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold">合計実働</span>
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200 font-bold">
-                              {
-                                emp.shifts
-                                  .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                  .reduce((acc, s) => {
-                                    if (!s.workTime || !s.workTime.includes(":")) return acc;
-                                    const [h, m] = s.workTime.split(":").map(Number);
-                                    if (isNaN(h) || isNaN(m)) return acc;
-                                    return acc + h + m/60;
-                                  }, 0).toFixed(1)
-                              }h
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground uppercase font-bold">有休合計</span>
-                            <Badge variant="secondary" className="bg-red-100 text-red-800 border-red-200 font-bold">
-                              {
-                                emp.shifts
-                                  .filter(s => dateRange.some(d => s.date.startsWith(getDateStr(d))))
-                                  .filter(s => s.shift === "有休")
-                                  .length
-                              }日
-                            </Badge>
-                          </div>
-                        </div>
+                        <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
                       </CardHeader>
                       <CardContent className="p-0">
                         {isFromAdmin && (
@@ -2479,7 +2448,14 @@ export default function App() {
                             </Button>
                           </div>
                         )}
-                        {!isFromAdmin ? <PersonalShiftList employee={emp} dates={dateRange} remarks={displayRemarks} /> : <div className="employee-shift-table-wrap overflow-x-auto">
+                        {!isFromAdmin ? <div className="personal-overview-layout">
+                          <PersonalShiftList employee={emp} dates={dateRange} remarks={displayRemarks} />
+                          <aside className="personal-summary-panel">
+                            <div><span>出勤日数</span><strong>{attendanceDays}<small>日</small></strong></div>
+                            <div><span>合計実働時間</span><strong>{totalWorkHours}<small>時間</small></strong></div>
+                            <div><span>有給取得数</span><strong>{paidLeaveDays}<small>日</small></strong></div>
+                          </aside>
+                        </div> : <div className="employee-shift-table-wrap overflow-x-auto">
                           <Table className="employee-shift-table text-[13px]">
                             <TableHeader>
                               <TableRow className="bg-muted/30 hover:bg-muted/30">

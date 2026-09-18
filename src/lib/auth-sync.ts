@@ -13,15 +13,25 @@ export interface ShiftSession {
 }
 
 async function call(action: string, payload: Record<string, unknown> = {}) {
-  const response = await fetch(GAS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action, ...payload })
-  });
-  if (!response.ok) throw new Error(`通信に失敗しました（${response.status}）`);
-  const json = await response.json();
-  if (!json.success) throw new Error(json.message || "認証処理に失敗しました");
-  return json;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(GAS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify({ action, ...payload }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`通信に失敗しました（${response.status}）`);
+    const json = await response.json();
+    if (!json.success) throw new Error(json.message || "認証処理に失敗しました");
+    return json;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw new Error("ログイン確認がタイムアウトしました。もう一度お試しください");
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
 
 function readSession(key: string): ShiftSession | null {
@@ -54,6 +64,22 @@ export async function loginEmployee(loginId: string, password: string, employeeI
 export async function loginEditor(loginId: string, password: string, employeeId: string, employeeName: string): Promise<ShiftSession> {
   const json = await call("loginShiftAdmin", { loginId, password, employeeId, employeeName });
   const session = json.session as ShiftSession;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
+export async function loginShift(loginId: string, password: string, employeeId: string, employeeName: string): Promise<ShiftSession> {
+  const payload = { loginId, password, employeeId, employeeName };
+  const [employeeResult, adminResult] = await Promise.allSettled([
+    call("loginShiftEmployee", payload),
+    call("loginShiftAdmin", payload)
+  ]);
+  const result = adminResult.status === "fulfilled" ? adminResult : employeeResult;
+  if (result.status === "rejected") {
+    const error = employeeResult.status === "rejected" ? employeeResult.reason : result.reason;
+    throw error instanceof Error ? error : new Error("IDまたはパスワードを確認してください");
+  }
+  const session = result.value.session as ShiftSession;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }

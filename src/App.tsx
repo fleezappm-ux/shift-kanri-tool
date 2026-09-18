@@ -1708,8 +1708,8 @@ export default function App() {
               {appSession.role === "employee" && <>
                 <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("board")}><MessageSquareText className="mr-3 h-4 w-4 text-amber-600" />お知らせ掲示板</Button>
                 <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("mypage")}><UserRound className="mr-3 h-4 w-4 text-blue-600" />マイページ</Button>
-                <Button variant="outline" className="sidebar-leave-button w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("requests")}><CalendarDays className="mr-3 h-4 w-4" />休み希望日提出</Button>
               </>}
+              <Button variant="outline" className="sidebar-leave-button w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => { setActiveTab("requests"); setIsFromAdmin(false); }}><CalendarDays className="mr-3 h-4 w-4" />休み希望日提出</Button>
             </div>
           </section>
 

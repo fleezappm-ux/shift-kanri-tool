@@ -2078,18 +2078,8 @@ export default function App() {
                     <div className="dashboard-blue-controls">
                       <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
                       <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
-                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><strong>{dashboardTitle}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
+                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><div className="dashboard-period-title"><strong>{dashboardTitle}</strong><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button></div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
                       <label><span>名前</span><select value="dashboard" onChange={event => { if (event.target.value !== "dashboard") { setActiveTab(event.target.value); setIsFromAdmin(false); } }}><option value="dashboard">全員</option>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
-                      <div className="dashboard-card-actions flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="dashboard-list-toggle h-8 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 hover:text-blue-800"
-                        onClick={() => setDashboardListView(value => !value)}
-                      >
-                        <Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示に戻す" : "一覧表示"}
-                      </Button>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 md:flex-1 md:min-h-0 md:flex md:flex-col">

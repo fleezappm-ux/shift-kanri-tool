@@ -2,10 +2,12 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUe
 
 const SESSION_KEY = "shift_app_session";
 const API_KEY_KEY = "shift_api_key";
+export interface ShiftLoginEmployee { id: string; name: string; displayName: string; active: boolean; }
 
 export interface ShiftSession {
   token: string;
   role: "admin" | "employee";
+  employeeId?: string;
   employeeName?: string;
   expiresAt: string;
 }
@@ -42,15 +44,15 @@ export const getEmployeeToken = () => getShiftSession()?.token || "";
 export const getManagementApiKey = () => localStorage.getItem(API_KEY_KEY) || "";
 export const saveManagementApiKey = (value: string) => localStorage.setItem(API_KEY_KEY, value.trim());
 
-export async function loginEmployee(loginId: string, password: string): Promise<ShiftSession> {
-  const json = await call("loginShiftEmployee", { loginId, password });
+export async function loginEmployee(loginId: string, password: string, employeeId: string, employeeName: string): Promise<ShiftSession> {
+  const json = await call("loginShiftEmployee", { loginId, password, employeeId, employeeName });
   const session = json.session as ShiftSession;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
-export async function loginEditor(loginId: string, password: string): Promise<ShiftSession> {
-  const json = await call("loginShiftAdmin", { loginId, password });
+export async function loginEditor(loginId: string, password: string, employeeId: string, employeeName: string): Promise<ShiftSession> {
+  const json = await call("loginShiftAdmin", { loginId, password, employeeId, employeeName });
   const session = json.session as ShiftSession;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
@@ -58,3 +60,8 @@ export async function loginEditor(loginId: string, password: string): Promise<Sh
 
 export function logoutShiftSession() { localStorage.removeItem(SESSION_KEY); }
 export const logoutEmployee = logoutShiftSession;
+
+export async function fetchShiftLoginEmployees(): Promise<ShiftLoginEmployee[]> {
+  const json = await call("getShiftLoginEmployees");
+  return Array.isArray(json.employees) ? json.employees : [];
+}

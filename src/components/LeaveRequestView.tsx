@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale/ja";
 import { CalendarDays, CheckCircle2, Send, Trash2 } from "lucide-react";
-import { Employee, GlobalRemark, LeaveRequest, LeaveRequestType } from "../types";
+import { CommentVisibility, Employee, GlobalRemark, LeaveRequest, LeaveRequestType } from "../types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -15,22 +15,31 @@ interface Props {
   remarks: GlobalRemark[];
   locked: boolean;
   loading: boolean;
-  onSubmit: (input: { employeeName: string; date: string; type: LeaveRequestType; comment: string }) => Promise<void>;
+  operatorId: string;
+  onSubmit: (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
+  monthOptions: { key: string; label: string }[];
+  currentMonthKey: string;
+  onMonthSelect: (key: string) => void;
 }
 
-export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, onSubmit, onCancel }: Props) {
-  const [employeeName, setEmployeeName] = useState("");
+export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, operatorId, onSubmit, onCancel, monthOptions, currentMonthKey, onMonthSelect }: Props) {
+  const operator = employees.find(item => item.id === operatorId);
+  const employeeName = operator?.displayName || operator?.name || "";
   const [selectedDate, setSelectedDate] = useState("");
   const [type, setType] = useState<LeaveRequestType>("有給希望");
   const [comment, setComment] = useState("");
+  const [commentVisibility, setCommentVisibility] = useState<CommentVisibility>("all");
+  const [confirming, setConfirming] = useState(false);
   const mine = useMemo(() => requests.filter(item => item.employeeName === employeeName && item.status !== "取消"), [requests, employeeName]);
   const requestByDate = new Map(mine.map(item => [item.date, item]));
 
   const submit = async () => {
     if (!employeeName || !selectedDate) return;
-    await onSubmit({ employeeName, date: selectedDate, type, comment });
+    if (!confirming) { setConfirming(true); return; }
+    await onSubmit({ employeeId: operatorId, employeeName, date: selectedDate, type, comment, commentVisibility });
     setComment("");
+    setConfirming(false);
   };
 
   return (
@@ -41,16 +50,13 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
       </header>
 
       <section className="leave-request-card">
+        <label className="leave-field-label">希望を出す月</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{monthOptions.map(month => <Button key={month.key} variant={month.key === currentMonthKey ? "default" : "outline"} onClick={() => onMonthSelect(month.key)}>{month.label}</Button>)}</div>
         <div className={`schedule-stage ${locked ? "is-final" : "is-draft"}`}>
           <strong>{locked ? "確定シフト" : "シフト案・希望受付中"}</strong>
           <span>{locked ? "確定済みのため新しい希望は提出できません" : `${format(dates[0], "yyyy/M/d")}〜${format(dates[dates.length - 1], "M/d")}`}</span>
         </div>
 
-        <><label className="leave-field-label">あなたの名前</label>
-          <select className="leave-native-select" value={employeeName} onChange={event => setEmployeeName(event.target.value)}>
-            <option value="">名前を選択してください</option>
-            {employees.map(employee => <option key={employee.id} value={employee.displayName || employee.name}>{employee.displayName || employee.name}</option>)}
-          </select></>
+        <><label className="leave-field-label">操作員</label><div className="rounded-xl bg-slate-100 p-3 text-sm font-black">{employeeName || "未選択"}</div></>
 
         {employeeName && !locked && <>
           <label className="leave-field-label">希望日をタップ</label>
@@ -71,8 +77,10 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
             {TYPES.map(value => <button key={value} className={type === value ? "is-selected" : ""} onClick={() => setType(value)}>{value}</button>)}
           </div>
           <Input value={comment} onChange={event => setComment(event.target.value)} placeholder="理由・連絡事項（任意）" className="h-11" />
-          <Button className="w-full h-12 font-bold" disabled={!selectedDate || loading} onClick={submit}><Send className="w-4 h-4 mr-2" />{requestByDate.has(selectedDate) ? "希望を更新する" : "この内容で提出する"}</Button>
-          <Button variant="outline" className="w-full h-11 font-bold" disabled={loading || mine.some(item => item.type === "希望なし")} onClick={() => onSubmit({ employeeName, date: "", type: "希望なし", comment: "" })}><CheckCircle2 className="w-4 h-4 mr-2" />この月は希望なし</Button>
+          <label className="leave-field-label">コメントの公開範囲</label><select className="leave-native-select" value={commentVisibility} onChange={event => setCommentVisibility(event.target.value as CommentVisibility)}><option value="all">全員に表示</option><option value="editors">編集者のみに表示</option></select>
+          {confirming && <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4 text-sm"><strong>提出内容を確認してください</strong><p className="mt-2">{employeeName}／{selectedDate}／{type}</p>{comment && <p className="mt-1">{comment}</p>}<p className="mt-1 text-xs text-slate-500">公開範囲：{commentVisibility === "all" ? "全員" : "編集者のみ"}</p></div>}
+          <Button className="w-full h-12 font-bold" disabled={!selectedDate || loading} onClick={submit}><Send className="w-4 h-4 mr-2" />{confirming ? "提出する" : "提出内容を確認"}</Button>
+          <Button variant="outline" className="w-full h-11 font-bold" disabled={loading || mine.some(item => item.type === "希望なし")} onClick={() => onSubmit({ employeeId: operatorId, employeeName, date: "", type: "希望なし", comment: "", commentVisibility: "all" })}><CheckCircle2 className="w-4 h-4 mr-2" />この月は希望なし</Button>
         </>}
       </section>
 
@@ -86,7 +94,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           </div>)}
         </div>}
       </section>}
-      <p className="leave-auth-note">自分の名前を選んで希望を提出してください。</p>
+      <p className="leave-auth-note">現在の操作員として希望を提出します。</p>
     </div>
   );
 }

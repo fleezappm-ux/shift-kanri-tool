@@ -1,9 +1,10 @@
 import { format } from "date-fns";
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock3, Smartphone, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Smartphone, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
-import { Employee, GlobalRemark } from "../types";
+import { Employee, GlobalRemark, LeaveRequest } from "../types";
 import { WorkforceHeatmap } from "./WorkforceHeatmap";
 import { Button } from "@/components/ui/button";
+import { BulletinBoard } from "./BulletinBoard";
 
 interface HomeViewProps {
   employees: Employee[];
@@ -20,6 +21,12 @@ interface HomeViewProps {
   onEmployeeSelect: (employeeId: string) => void;
   onOpenLeaveRequest: () => void;
   onInstall: () => void;
+  operatorName: string;
+  requests: LeaveRequest[];
+  boardMonthLabel: string;
+  boardLocked: boolean;
+  isEditor: boolean;
+  onOpenBoard: () => void;
 }
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
@@ -46,7 +53,8 @@ function shiftLabel(employee: Employee, date: string): string {
 
 export function HomeView({
   employees, remarks, weekDates, selectedDate, today, weekOffset, heatmapEnabled, monthDates,
-  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest, onInstall
+  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest, onInstall,
+  operatorName, requests, boardMonthLabel, boardLocked, isEditor, onOpenBoard
 }: HomeViewProps) {
   const orderedEmployees = sortEmployeesForDisplay(employees);
   const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
@@ -65,6 +73,7 @@ export function HomeView({
           <h1>薬局シフト</h1>
         </div>
         <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>ホーム画面に追加</span></button>
+        <span className="ml-auto flex items-center gap-1 text-xs font-bold text-slate-500"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
       </header>
       <div className="home-toolbar">
         <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /> 前週</Button>
@@ -74,10 +83,6 @@ export function HomeView({
         </div>
         <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
       </div>
-
-      <button className="home-leave-request" onClick={onOpenLeaveRequest}>
-        <CalendarDays className="w-5 h-5" /><div><strong>有給・休み希望を提出</strong><span>希望受付中のシフト案に申請できます</span></div><ArrowRight className="w-5 h-5" />
-      </button>
 
       <div className="home-week-grid">
         {weekDates.map(date => {
@@ -104,23 +109,29 @@ export function HomeView({
           <div className="home-roster-count"><Users className="w-4 h-4" /> 出勤 {workingCount}人</div>
         </div>
         {selectedRemark && selectedRemark.type !== "なし" && <div className="home-remark">{selectedRemark.type}{selectedRemark.text ? `：${selectedRemark.text}` : ""}</div>}
-        <div className="home-roster-list">
-          {orderedEmployees.map(employee => {
+        <div className="grid grid-cols-2 gap-3">
+          {[orderedEmployees.filter(e => e.role === "薬剤師"), orderedEmployees.filter(e => e.role !== "薬剤師")].map((group, groupIndex) => <div key={groupIndex} className={groupIndex ? "border-l pl-3" : ""}>
+          {group.map(employee => {
             const shift = employee.shifts.find(item => item.date === selectedDate);
             const label = shiftLabel(employee, selectedDate);
             const isOff = label === "休み" || label === "有休";
+            if (!shift?.shift || isOff) return null;
             return (
               <button key={employee.id} className="home-roster-row" onClick={() => onEmployeeSelect(employee.id)}>
                 <span className="home-employee-name">{employee.displayName || employee.name}</span>
-                <span className={`home-shift-value ${isOff ? "is-off" : ""}`}>{label}</span>
-                <span className="home-work-time">{shift?.shift && !isOff && shift.shift !== "任意入力" ? <><Clock3 className="w-3.5 h-3.5" /> 実働 {shift.workTime}</> : ""}</span>
                 <ChevronRight className="w-4 h-4 text-slate-300" />
               </button>
             );
-          })}
+          })}</div>)}
         </div>
         <Button variant="outline" className="w-full mt-3 h-10 font-bold" onClick={onShowDashboard}>月の全体シフトを見る <ArrowRight className="w-4 h-4 ml-2" /></Button>
       </section>
+
+      {!boardLocked && <div onClick={onOpenBoard}><BulletinBoard requests={requests} monthLabel={boardMonthLabel} isEditor={isEditor} locked={boardLocked} /></div>}
+
+      <button className="home-leave-request" onClick={onOpenLeaveRequest}>
+        <CalendarDays className="w-5 h-5" /><div><strong>休み希望日を提出する</strong><span>希望受付中のシフト案に提出できます</span></div><ArrowRight className="w-5 h-5" />
+      </button>
 
       {heatmapEnabled && <WorkforceHeatmap dates={monthDates} employees={employees} remarks={remarks} />}
     </motion.div>

@@ -1,4 +1,4 @@
-import { Employee } from "../types";
+import { Employee, EmployeeRole } from "../types";
 import { getShiftSession } from "./auth-sync";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
@@ -10,6 +10,7 @@ export interface EmployeeMasterItem {
   displayOrder: number;
   active: boolean;
   aliases: string[];
+  role: EmployeeRole;
 }
 
 async function call(action: string, payload: Record<string, unknown> = {}) {
@@ -42,6 +43,7 @@ export function mergeEmployeesWithMaster(source: Employee[], master: EmployeeMas
       displayOrder: item.displayOrder,
       active: item.active,
       aliases: item.aliases || [],
+      role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員"),
       shifts: matches.flatMap(employee => employee.shifts)
     };
   });

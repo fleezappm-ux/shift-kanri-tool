@@ -51,21 +51,43 @@ export interface Employee {
   displayOrder?: number;
   active?: boolean;
   aliases?: string[];
+  role?: EmployeeRole;
   shifts: DayShift[];
 }
+
+export type EmployeeRole = "薬剤師" | "事務員" | "登録販売者";
+export type CommentVisibility = "all" | "editors";
 
 export type LeaveRequestType = "有給希望" | "休み希望" | "午前休希望" | "午後休希望" | "希望なし";
 export type LeaveRequestStatus = "申請中" | "承認" | "却下" | "取消";
 
 export interface LeaveRequest {
   id: string;
+  employeeId?: string;
   employeeName: string;
   date: string;
   periodStart: string;
   periodEnd: string;
   type: LeaveRequestType;
   comment: string;
+  commentVisibility?: CommentVisibility;
   status: LeaveRequestStatus;
   submittedAt: string;
   updatedAt: string;
+}
+
+export interface PaidLeaveBalance {
+  employeeId: string;
+  enabled: boolean;
+  remainingDays: number;
+  renewalDate: string;
+  grantDays: number;
+  updatedAt: string;
+}
+
+export interface AutoDraftSettings {
+  enabled: boolean;
+  started: boolean;
+  horizonMonths: number;
+  lastRunAt?: string;
 }

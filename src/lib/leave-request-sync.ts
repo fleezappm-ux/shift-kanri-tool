@@ -1,4 +1,4 @@
-import { LeaveRequest, LeaveRequestStatus, LeaveRequestType } from "../types";
+import { CommentVisibility, LeaveRequest, LeaveRequestStatus, LeaveRequestType, PaidLeaveBalance } from "../types";
 import { getEmployeeToken, getManagementApiKey, getShiftSession } from "./auth-sync";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
@@ -24,15 +24,27 @@ export async function fetchLeaveRequests(periodStart: string, periodEnd: string)
 }
 
 export async function submitLeaveRequest(input: {
+  employeeId: string;
   employeeName: string;
   date: string;
   periodStart: string;
   periodEnd: string;
   type: LeaveRequestType;
   comment: string;
+  commentVisibility: CommentVisibility;
 }): Promise<LeaveRequest> {
   const json = await request("saveShiftLeaveRequest", { employeeToken: getEmployeeToken(), request: input });
   return json.request as LeaveRequest;
+}
+
+export async function fetchPaidLeaveBalance(employeeId: string): Promise<PaidLeaveBalance | null> {
+  const json = await request("getShiftPaidLeaveBalance", { employeeId });
+  return json.balance || null;
+}
+
+export async function savePaidLeaveBalance(balance: PaidLeaveBalance): Promise<PaidLeaveBalance> {
+  const json = await request("saveShiftPaidLeaveBalance", { balance });
+  return json.balance as PaidLeaveBalance;
 }
 
 export async function cancelLeaveRequest(id: string): Promise<LeaveRequest> {

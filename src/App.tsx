@@ -25,6 +25,7 @@ import {
   ListChecks,
   CalendarDays,
   SlidersHorizontal
+  ,MessageSquareText, UserRound, CalendarClock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -53,7 +54,7 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 
-import { Employee, DayShift, ShiftType, GlobalRemark, LeaveRequest, LeaveRequestStatus, LeaveRequestType, SpecialDayRule } from "./types";
+import { AutoDraftSettings, CommentVisibility, Employee, DayShift, ShiftType, GlobalRemark, LeaveRequest, LeaveRequestStatus, LeaveRequestType, PaidLeaveBalance, SpecialDayRule } from "./types";
 import { SHIFT_OPTIONS, DEFAULT_CYCLE_PATTERNS, CyclePatterns } from "./constants";
 import { calculateTimes, generateConfiguredDateRange, normalizeShiftInput, finalizeShiftText, resolveCycleShift } from "./lib/shift-utils";
 import { fetchShiftsFromServer, saveMonthToServer, fetchHolidaysFromServer, fetchShiftPeriodStatus, saveShiftPeriodStatus } from "./lib/shift-sync";
@@ -63,7 +64,7 @@ import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 import { LeaveRequestView } from "./components/LeaveRequestView";
 import { LeaveRequestManager } from "./components/LeaveRequestManager";
 import { PersonalShiftList } from "./components/PersonalShiftList";
-import { cancelLeaveRequest, fetchLeaveRequests, submitLeaveRequest, updateLeaveRequestStatus } from "./lib/leave-request-sync";
+import { cancelLeaveRequest, fetchLeaveRequests, fetchPaidLeaveBalance, savePaidLeaveBalance, submitLeaveRequest, updateLeaveRequestStatus } from "./lib/leave-request-sync";
 import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
@@ -75,6 +76,10 @@ import { ShiftLogin } from "./components/ShiftLogin";
 import { EmployeeMasterSettings } from "./components/EmployeeMasterSettings";
 import { EmployeeMasterItem, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster } from "./lib/employee-master-sync";
 import { fetchCycleMaster, saveCycleMaster } from "./lib/cycle-master-sync";
+import { BulletinBoard } from "./components/BulletinBoard";
+import { MyPage } from "./components/MyPage";
+import { AutoDraftSettings as AutoDraftSettingsView } from "./components/AutoDraftSettings";
+import { fetchAutoDraftSettings, saveAutoDraftSettings } from "./lib/auto-draft-sync";
 
 const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
 const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
@@ -99,7 +104,7 @@ function getCurrentShiftMonth(today = new Date(), settings = DEFAULT_CALENDAR_PE
 
 export default function App() {
   const [appSession, setAppSession] = useState<ShiftSession | null>(() => getShiftSession());
-  const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations">("menu");
+  const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations" | "autodraft">("menu");
   const [storeMaster, setStoreMaster] = useState<StoreMaster>(() => {
     const saved = localStorage.getItem("store_master_settings");
     if (!saved) return DEFAULT_STORE_MASTER;
@@ -223,12 +228,18 @@ export default function App() {
   const [heatmapEnabled, setHeatmapEnabled] = useState(() => localStorage.getItem("heatmap_enabled") === "true");
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [leaveRequestLoading, setLeaveRequestLoading] = useState(false);
+  const [homeBoardRequests, setHomeBoardRequests] = useState<LeaveRequest[]>([]);
   const [specialDayRules, setSpecialDayRules] = useState<SpecialDayRule[]>(DEFAULT_SPECIAL_DAY_RULES);
   const [specialDayLoading, setSpecialDayLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [managementApiKey, setManagementApiKey] = useState(() => getManagementApiKey());
   const [dashboardListView, setDashboardListView] = useState(false);
   const [periodStatusLoading, setPeriodStatusLoading] = useState(false);
+  const [paidLeaveBalance, setPaidLeaveBalance] = useState<PaidLeaveBalance | null>(null);
+  const [autoDraftSettings, setAutoDraftSettings] = useState<AutoDraftSettings>(() => {
+    try { return JSON.parse(localStorage.getItem("shift_auto_draft_settings") || "null") || { enabled: false, started: false, horizonMonths: 3 }; }
+    catch { return { enabled: false, started: false, horizonMonths: 3 }; }
+  });
 
   useEffect(() => {
     if (syncState !== "saving") {
@@ -312,6 +323,7 @@ export default function App() {
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
   const currentMonthKey = format(currentMonth, "yyyy-MM");
   const isLocked = lockedMonths.includes(currentMonthKey);
+  const homeBoardMonth = isLocked ? addMonths(currentMonth, 1) : currentMonth;
 
   const goHome = () => {
     setCurrentMonth(getCurrentShiftMonth(new Date(), calendarPeriodSettings));
@@ -320,6 +332,12 @@ export default function App() {
     setActiveTab("home");
     setIsFromAdmin(false);
   };
+
+  useEffect(() => {
+    if (!appSession?.token) return;
+    const range = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+    fetchLeaveRequests(getDateStr(range[0]), getDateStr(range[range.length - 1])).then(setHomeBoardRequests).catch(() => setHomeBoardRequests([]));
+  }, [appSession?.token, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   const changeHomeWeek = (offset: number) => {
     const today = new Date();
@@ -578,7 +596,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appSession?.token, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
-  const handleLeaveRequestSubmit = async (input: { employeeName: string; date: string; type: LeaveRequestType; comment: string }) => {
+  const handleLeaveRequestSubmit = async (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => {
     if (!dateRange.length) return;
     setLeaveRequestLoading(true);
     try {
@@ -655,6 +673,8 @@ export default function App() {
   );
   const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
   const dashboardEmployees = sortEmployeesForDisplay(employees);
+  const operatorEmployee = dashboardEmployees.find(item => item.id === appSession?.employeeId || (item.displayName || item.name) === appSession?.employeeName);
+  const loginEmployees: EmployeeMasterItem[] = employeeMaster.length ? employeeMaster : employees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員") }));
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];
@@ -665,6 +685,96 @@ export default function App() {
     ...(storeMaster.obonEnabled && storeMaster.obonBandEnabled ? [{ color: storeMaster.obonColor, label: "お盆" }] : []),
     ...specialDayRules.filter(rule => rule.enabled && rule.name !== "祝日").sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => ({ color: rule.color, label: rule.name }))
   ].filter((item, index, items) => items.findIndex(candidate => candidate.color === item.color && candidate.label === item.label) === index);
+
+  useEffect(() => {
+    if (!appSession?.employeeId) return;
+    fetchPaidLeaveBalance(appSession.employeeId).then(setPaidLeaveBalance).catch(error => console.error("有給情報の取得に失敗しました", error));
+  }, [appSession?.employeeId]);
+
+  useEffect(() => { localStorage.setItem("shift_auto_draft_settings", JSON.stringify(autoDraftSettings)); }, [autoDraftSettings]);
+  useEffect(() => { if (appSession?.role !== "admin") return; fetchAutoDraftSettings().then(value => { if (value) setAutoDraftSettings(value); }).catch(() => undefined); }, [appSession?.role]);
+
+  const updateAutoDraftSettings = async (value: AutoDraftSettings) => { setAutoDraftSettings(value); try { setAutoDraftSettings(await saveAutoDraftSettings(value)); } catch (error) { toast.error(error instanceof Error ? error.message : "自動作成設定を保存できませんでした"); } };
+
+  const startAutoDraft = async (silent = false) => {
+    if (!silent && !window.confirm("作成対象月から3か月先までのシフト案を作成します。確定済み・手動編集済みの勤務は上書きしません。開始しますか？")) return;
+    try {
+    const baseMonth = silent ? getCurrentShiftMonth(new Date(), calendarPeriodSettings) : currentMonth;
+    const targetRanges = Array.from({ length: 4 }, (_, offset) => {
+      const anchor = addMonths(baseMonth, offset);
+      return generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+    });
+    const allDates = targetRanges.flat();
+    const holidaySet = new Set(getJapaneseHolidayDates(allDates[0], allDates[allDates.length - 1]));
+    const remarkMap = new Map<string, GlobalRemark>(globalRemarks.map(item => [item.date, item]));
+    const isDuty = (date: Date) => remarkMap.get(getDateStr(date))?.type === "当番薬局" || findSpecialDayRule(date, specialDayRules)?.behavior === "duty";
+    const isRed = (date: Date) => {
+      if (isDuty(date)) return false;
+      const remark = remarkMap.get(getDateStr(date));
+      const rule = findSpecialDayRule(date, specialDayRules);
+      return date.getDay() === 0 || holidaySet.has(getDateStr(date)) || remark?.color === "red" || remark?.type === "祝日" || remark?.type === "店休日" || rule?.color === "red" || rule?.behavior === "all-off";
+    };
+    const isBlue = (date: Date) => remarkMap.get(getDateStr(date))?.color === "blue" || remarkMap.get(getDateStr(date))?.type === "谷川整形休診" || findSpecialDayRule(date, specialDayRules)?.color === "blue";
+    const mondayOf = (date: Date) => { const result = new Date(date); result.setDate(date.getDate() + (date.getDay() === 0 ? -6 : 1 - date.getDay())); result.setHours(0, 0, 0, 0); return result; };
+    const doubleRedWeek = (monday: Date) => { const thu = new Date(monday); thu.setDate(monday.getDate() + 3); const sat = new Date(monday); sat.setDate(monday.getDate() + 5); return isRed(thu) && isRed(sat); };
+    const cycleWeekIndex = (date: Date, assignment: { cycleType: number; anchorDate: string }) => {
+      const anchor = new Date(`${assignment.anchorDate}T00:00:00`); const anchorMonday = mondayOf(anchor); const currentMonday = mondayOf(date);
+      let effectiveWeeks = 0; const direction = currentMonday >= anchorMonday ? 1 : -1; const cursor = new Date(anchorMonday);
+      while ((direction > 0 && cursor < currentMonday) || (direction < 0 && cursor > currentMonday)) { if (!doubleRedWeek(cursor)) effectiveWeeks += direction; cursor.setDate(cursor.getDate() + 7 * direction); }
+      const length = Math.max(1, Math.min(4, cycleLengths[assignment.cycleType] || 2));
+      return ((effectiveWeeks % length) + length) % length;
+    };
+    const generatedEmployees = employees.map(employee => {
+      const assignment = cycleAssignments[employee.id];
+      if (!assignment) return employee;
+      const shifts = [...employee.shifts];
+      const generatedDates = new Set<string>();
+      allDates.forEach(date => {
+        const key = getDateStr(date);
+        if (shifts.some(item => item.date === key)) return;
+        const weekIndex = cycleWeekIndex(date, assignment);
+        let shift = resolveCycleShift(cyclePatterns, assignment.cycleType, date.getDay(), weekIndex);
+        if (isRed(date)) shift = "休み";
+        else if (isBlue(date) && ["金井", "児玉"].includes(employee.name)) shift = "休み";
+        if (!shift) return;
+        const times = calculateTimes(shift);
+        shifts.push({ date: key, shift, breakTime: times.breakTime, workTime: times.workTime, comment: "" });
+        generatedDates.add(key);
+      });
+      const weekKeys = [...new Set(allDates.map(date => getDateStr(mondayOf(date))))];
+      weekKeys.forEach(weekKey => {
+        const monday = new Date(`${weekKey}T00:00:00`);
+        if (doubleRedWeek(monday)) return;
+        const week = Array.from({ length: 7 }, (_, index) => { const date = new Date(monday); date.setDate(monday.getDate() + index); return date; });
+        const lostWorkday = week.some(date => { const base = resolveCycleShift(cyclePatterns, assignment.cycleType, date.getDay(), cycleWeekIndex(date, assignment)); return Boolean(base && base !== "休み" && base !== "有休" && isRed(date)); });
+        if (!lostWorkday) return;
+        const replacement = week.map(date => ({ date, base: resolveCycleShift(cyclePatterns, assignment.cycleType, date.getDay(), cycleWeekIndex(date, assignment)) })).find(item => item.base === "休み" && !isRed(item.date));
+        if (!replacement) return;
+        const index = shifts.findIndex(item => item.date === getDateStr(replacement.date));
+        if (index >= 0 && generatedDates.has(getDateStr(replacement.date)) && shifts[index].shift === "休み") shifts[index] = { ...shifts[index], shift: "有休", breakTime: "0:00", workTime: "0:00" };
+      });
+      return { ...employee, shifts };
+    });
+    setEmployees(generatedEmployees);
+    for (const range of targetRanges) {
+      await saveMonthToServer(generatedEmployees, globalRemarks, getDateStr(range[0]), getDateStr(range[range.length - 1]), appSession?.employeeName || "シフト編集者");
+    }
+    await updateAutoDraftSettings({ ...autoDraftSettings, started: true, lastRunAt: new Date().toISOString() });
+    toast.success("シフト案の自動作成を開始しました");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "シフト案を自動作成できませんでした"); }
+  };
+
+  const autoDraftRunRef = useRef("");
+  useEffect(() => {
+    if (appSession?.role !== "admin" || !autoDraftSettings.enabled || !autoDraftSettings.started) return;
+    const actualMonthKey = format(getCurrentShiftMonth(new Date(), calendarPeriodSettings), "yyyy-MM");
+    const lastMonth = autoDraftSettings.lastRunAt ? format(new Date(autoDraftSettings.lastRunAt), "yyyy-MM") : "";
+    if (lastMonth === actualMonthKey || autoDraftRunRef.current === actualMonthKey) return;
+    autoDraftRunRef.current = actualMonthKey;
+    void startAutoDraft(true);
+    // 月が進んだときに不足する最終月だけを補完します。既存行は上書きしません。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSession?.role, autoDraftSettings.enabled, autoDraftSettings.started, currentMonthKey]);
 
   const handleSaveSpecialDayRules = async (rules: SpecialDayRule[]) => {
     setSpecialDayLoading(true);
@@ -758,7 +868,7 @@ export default function App() {
 
   const saveCurrentMonth = async () => {
     if (syncState === "saving" || dateRange.length === 0) return;
-    const savingEditor = "シフト編集者";
+    const savingEditor = appSession?.employeeName || "シフト編集者";
     setSyncState("saving");
     setSaveFeedback({ kind: "saving", message: "Notionへ保存しています。この画面を閉じずにお待ちください" });
     try {
@@ -1464,7 +1574,7 @@ export default function App() {
     return employee.shifts.find(s => s.date.startsWith(dateStr));
   };
 
-  if (!appSession) return <><ShiftLogin onLogin={session => { setAppSession(session); toast.success(session.role === "admin" ? "編集者としてログインしました" : "ログインしました"); }} /><Toaster position="top-center" /></>;
+  if (!appSession) return <><ShiftLogin employees={loginEmployees} onLogin={session => { setAppSession(session); toast.success(session.role === "admin" ? "編集者としてログインしました" : "ログインしました"); }} /><Toaster position="top-center" /></>;
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="shift-shell flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">
@@ -1591,9 +1701,15 @@ export default function App() {
                 <Grid3X3 className="w-4 h-4 mr-3 text-blue-600" />
                 全体シフト
               </Button>
+              {appSession.role === "employee" && <>
+                <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("board")}><MessageSquareText className="mr-3 h-4 w-4 text-amber-600" />お知らせ掲示板</Button>
+                <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("requests")}><CalendarDays className="mr-3 h-4 w-4 text-pink-600" />休み希望日提出</Button>
+                <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("mypage")}><UserRound className="mr-3 h-4 w-4 text-blue-600" />マイページ</Button>
+              </>}
             </div>
           </section>
 
+          {appSession.role === "admin" && <>
           <section className="mb-6">
             <h3 className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-4 px-2">
               アクション
@@ -1666,13 +1782,14 @@ export default function App() {
               </Button>
             </div>
           </section>
+          </>}
         </div>
 
         <div className="mt-auto pt-6 space-y-2">
           <Button variant="ghost" className="w-full justify-start text-slate-500" onClick={() => { logoutShiftSession(); setAppSession(null); setActiveTab("home"); setIsFromAdmin(false); }}>
             ログアウト
           </Button>
-          <Button
+          {appSession.role === "admin" && <><Button
             className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
             onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })}
             disabled={syncState === "loading" || syncState === "saving" || syncState === "saved"}
@@ -1683,7 +1800,7 @@ export default function App() {
           <div className="sync-indicator flex items-center gap-2 text-xs">
             <span className={`sync-dot ${syncState}`} />
             {syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "月単位で保存中" : syncState === "dirty" ? "未保存の変更あり" : syncState === "offline" ? "保存失敗（端末内に保存済み）" : "Notionに保存済み"}
-          </div>
+          </div></>}
         </div>
       </aside>
 
@@ -1703,32 +1820,15 @@ export default function App() {
           <Grid3X3 className="w-5 h-5" />
           全体
         </button>
-        <button
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isFromAdmin && activeTab !== "admin" ? "text-blue-600" : "text-slate-500"}`}
-          onClick={() => requestEditAccess(() => {
-            setActiveTab("dashboard");
-            setIsFromAdmin(true);
-          })}
-        >
-          <PencilLine className="w-5 h-5" />
-          シフト作成
-        </button>
-        <button
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold text-slate-500 relative"
-          onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })}
-          disabled={syncState === "loading" || syncState === "saving"}
-        >
-          <span className={`sync-dot ${syncState} absolute top-1 right-1/4`} />
-          <CloudUpload className="w-5 h-5" />
-          {syncState === "saving" ? `${saveElapsedSeconds}秒` : syncState === "saved" ? "保存済" : "保存"}
-        </button>
-        <button
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "admin" && isFromAdmin) ? "text-blue-600" : "text-slate-500"}`}
-          onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); setSettingsPage("menu"); }); }}
-        >
-          <FileCode className="w-5 h-5" />
-          設定
-        </button>
+        {appSession.role === "employee" ? <>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${activeTab === "board" ? "text-blue-600" : "text-slate-500"}`} onClick={() => { setActiveTab("board"); setIsFromAdmin(false); }}><MessageSquareText className="w-5 h-5" />掲示板</button>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${activeTab === "requests" ? "text-pink-600" : "text-slate-500"}`} onClick={() => { setActiveTab("requests"); setIsFromAdmin(false); }}><CalendarDays className="w-5 h-5" />休み希望</button>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${activeTab === "mypage" ? "text-blue-600" : "text-slate-500"}`} onClick={() => { setActiveTab("mypage"); setIsFromAdmin(false); }}><UserRound className="w-5 h-5" />マイページ</button>
+        </> : <>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isFromAdmin && activeTab !== "admin" ? "text-blue-600" : "text-slate-500"}`} onClick={() => requestEditAccess(() => { setActiveTab("dashboard"); setIsFromAdmin(true); })}><PencilLine className="w-5 h-5" />シフト作成</button>
+          <button className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold text-slate-500 relative" onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })} disabled={syncState === "loading" || syncState === "saving"}><span className={`sync-dot ${syncState} absolute top-1 right-1/4`} /><CloudUpload className="w-5 h-5" />{syncState === "saving" ? `${saveElapsedSeconds}秒` : syncState === "saved" ? "保存済" : "保存"}</button>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "admin" && isFromAdmin) ? "text-blue-600" : "text-slate-500"}`} onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); setSettingsPage("menu"); }); }}><FileCode className="w-5 h-5" />設定</button>
+        </>}
       </nav>
 
       {/* Main Content */}
@@ -1939,9 +2039,19 @@ export default function App() {
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
                 onOpenLeaveRequest={() => { setActiveTab("requests"); setIsFromAdmin(false); }}
                 onInstall={installToHomeScreen}
+                operatorName={appSession.employeeName || "未選択"}
+                requests={homeBoardRequests}
+                boardMonthLabel={format(homeBoardMonth, "yyyy年M月")}
+                boardLocked={false}
+                isEditor={appSession.role === "admin"}
+                onOpenBoard={() => { setCurrentMonth(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}
               />
             ) : activeTab === "requests" ? (
-              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} monthOptions={Array.from({ length: 4 }, (_, offset) => { const month = addMonths(getCurrentShiftMonth(new Date(), calendarPeriodSettings), offset); return { key: format(month, "yyyy-MM"), label: format(month, "M月") }; })} currentMonthKey={currentMonthKey} onMonthSelect={key => { const [year, month] = key.split("-").map(Number); setCurrentMonth(new Date(year, month - 1, 1)); }} />
+            ) : activeTab === "board" ? (
+              <BulletinBoard requests={leaveRequests} monthLabel={format(currentMonth, "yyyy年M月")} isEditor={appSession.role === "admin"} locked={isLocked} onPrevious={() => setCurrentMonth(value => addMonths(value, -1))} onNext={() => setCurrentMonth(value => addMonths(value, 1))} />
+            ) : activeTab === "mypage" ? (
+              <MyPage employee={operatorEmployee} requests={leaveRequests} locked={isLocked} initialBalance={paidLeaveBalance} onSaveBalance={async balance => { const saved = await savePaidLeaveBalance(balance); setPaidLeaveBalance(saved); }} onCancel={handleLeaveRequestCancel} onEdit={() => setActiveTab("requests")} />
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
@@ -2152,6 +2262,7 @@ export default function App() {
                       { key: "store", icon: Building2, title: "店舗マスター", description: "店舗名、集計期間、営業曜日、祝日・年末年始・お盆" },
                       { key: "dropdown", icon: ListChecks, title: "プルダウンマスター", description: "備考項目の名前、帯色、動作、有効・無効、並び順" },
                       { key: "special", icon: CalendarDays, title: "特殊日設定", description: "当番薬局、当番医、臨時休業など年ごとに変わる日付" },
+                      { key: "autodraft", icon: CalendarClock, title: "シフト案自動作成", description: "3か月先までの案をクールと休業日ルールから作成" },
                       { key: "operations", icon: SlidersHorizontal, title: "従業員・シフト設定", description: "従業員、勤務パターン、接続キー、出力設定" }
                     ].map(item => <button key={item.key} type="button" onClick={() => setSettingsPage(item.key as typeof settingsPage)} className="group flex min-h-32 items-center gap-4 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/50">
                       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><item.icon className="h-6 w-6" /></span>
@@ -2164,6 +2275,8 @@ export default function App() {
               <motion.div key="settings-store" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} /></CardContent></Card>
               </motion.div>
+            ) : activeTab === "admin" && settingsPage === "autodraft" ? (
+              <motion.div key="settings-autodraft" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><AutoDraftSettingsView settings={autoDraftSettings} onChange={value => void updateAutoDraftSettings(value)} onStart={startAutoDraft} /></motion.div>
             ) : activeTab === "admin" && settingsPage === "dropdown" ? (
               <motion.div key="settings-dropdown" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>プルダウンマスター</CardTitle><CardDescription>全体シフトの備考欄に表示する項目</CardDescription></div></div></CardHeader><CardContent className="p-6"><DropdownMasterSettings rules={specialDayRules} loading={specialDayLoading} onSave={handleSaveSpecialDayRules} /></CardContent></Card>

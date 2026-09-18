@@ -45,18 +45,14 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
   return (
     <div className="leave-request-page space-y-4 pb-5">
       <header className="leave-request-hero">
-        <div><span>SHIFT REQUEST</span><h1>休み希望を提出</h1><p>希望受付中のシフト案に申請します</p></div>
-        <CalendarDays className="w-9 h-9" />
+        <div className="leave-request-title"><span>SHIFT REQUEST</span><h1>休み希望を提出</h1><p>希望受付中のシフト案に申請します</p></div>
+        <div className="leave-request-months"><small>希望を出す月</small><div>{monthOptions.map(month => <Button key={month.key} className={month.key === currentMonthKey ? "is-current" : ""} variant="outline" onClick={() => onMonthSelect(month.key)}>{month.label}</Button>)}</div></div>
+        <CalendarDays className="leave-request-icon w-9 h-9" />
       </header>
 
       <section className="leave-request-card">
-        <label className="leave-field-label">希望を出す月</label><div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{monthOptions.map(month => <Button key={month.key} variant={month.key === currentMonthKey ? "default" : "outline"} onClick={() => onMonthSelect(month.key)}>{month.label}</Button>)}</div>
-        <div className={`schedule-stage ${locked ? "is-final" : "is-draft"}`}>
-          <strong>{locked ? "確定シフト" : "シフト案・希望受付中"}</strong>
-          <span>{locked ? "確定済みのため新しい希望は提出できません" : `${format(dates[0], "yyyy/M/d")}〜${format(dates[dates.length - 1], "M/d")}`}</span>
-        </div>
-
         <><label className="leave-field-label">操作員</label><div className="rounded-xl bg-slate-100 p-3 text-sm font-black">{employeeName || "未選択"}</div></>
+        <p className="leave-status-guide">確定シフトは黒、未確定のシフト案は白で表示されます。確定シフトは変更・希望提出できません。現在の表示期間：{format(dates[0], "yyyy/M/d")}〜{format(dates[dates.length - 1], "M/d")}</p>
 
         {employeeName && !locked && <>
           <label className="leave-field-label">希望日をタップ</label>

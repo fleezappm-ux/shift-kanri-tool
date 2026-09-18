@@ -4,17 +4,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect } from "react";
-import { fetchShiftLoginEmployees, loginEditor, loginEmployee, ShiftSession } from "../lib/auth-sync";
+import { fetchShiftLoginEmployees, loginEditor, loginEmployee, ShiftLoginEmployee, ShiftSession } from "../lib/auth-sync";
 import { EmployeeMasterItem } from "../lib/employee-master-sync";
 
 export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterItem[]; onLogin: (session: ShiftSession) => void }) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [operatorId, setOperatorId] = useState("");
-  const [operatorOptions, setOperatorOptions] = useState(employees);
+  const [operatorOptions, setOperatorOptions] = useState<ShiftLoginEmployee[]>(employees);
   useEffect(() => { fetchShiftLoginEmployees().then(items => {
     const realEmployees = items.filter(item => !/^従業員[Ａ-ＺA-Zａ-ｚa-z０-９0-9]+$/.test(item.displayName || item.name));
-    if (realEmployees.length) setOperatorOptions(realEmployees.map((item, index) => ({ ...item, displayOrder: index + 1, aliases: [], role: ["降旗", "藤川", "金井"].includes(item.displayName || item.name) ? "薬剤師" : "事務員" })));
+    if (realEmployees.length) setOperatorOptions(realEmployees);
   }).catch(() => undefined); }, []);
   const [loading, setLoading] = useState(false);
   const submit = async () => {
@@ -42,6 +42,7 @@ export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterIt
         <option value="">名前を選択してください</option>
         {operatorOptions.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.displayName || item.name}</option>)}
       </select>
+      {operatorOptions.filter(item => item.active).length === 0 && <p className="mt-2 text-xs font-bold text-red-600">従業員マスターが未設定です。管理者へ確認してください。</p>}
       <Button className="mt-6 h-12 w-full rounded-xl font-bold" disabled={loading} onClick={() => void submit()}><LogIn className="mr-2 h-4 w-4" />{loading ? "確認中…" : "ログイン"}</Button>
       <p className="mt-4 text-center text-[11px] text-slate-400">ID・パスワードを忘れた場合は管理者へ確認してください。</p>
     </section>

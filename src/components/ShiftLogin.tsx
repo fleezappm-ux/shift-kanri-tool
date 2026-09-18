@@ -12,7 +12,10 @@ export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterIt
   const [password, setPassword] = useState("");
   const [operatorId, setOperatorId] = useState("");
   const [operatorOptions, setOperatorOptions] = useState(employees);
-  useEffect(() => { fetchShiftLoginEmployees().then(items => { if (items.length) setOperatorOptions(items.map((item, index) => ({ ...item, displayOrder: index + 1, aliases: [], role: "事務員" }))); }).catch(() => undefined); }, []);
+  useEffect(() => { fetchShiftLoginEmployees().then(items => {
+    const realEmployees = items.filter(item => !/^従業員[Ａ-ＺA-Zａ-ｚa-z０-９0-9]+$/.test(item.displayName || item.name));
+    if (realEmployees.length) setOperatorOptions(realEmployees.map((item, index) => ({ ...item, displayOrder: index + 1, aliases: [], role: ["降旗", "藤川", "金井"].includes(item.displayName || item.name) ? "薬剤師" : "事務員" })));
+  }).catch(() => undefined); }, []);
   const [loading, setLoading] = useState(false);
   const submit = async () => {
     if (!loginId.trim() || !password || !operatorId) return toast.error("ID・パスワード・操作員を入力してください");

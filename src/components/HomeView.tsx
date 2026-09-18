@@ -64,7 +64,16 @@ export function HomeView({
     const label = shiftLabel(employee, selectedDate);
     return label !== "未入力" && label !== "休み" && label !== "有休";
   }).length;
-  const isPharmacist = (employee: Employee) => employee.role === "薬剤師" || ["降旗", "藤川", "金井"].includes(employee.displayName || employee.name);
+  const pharmacists = orderedEmployees.filter(employee => employee.role === "薬剤師");
+  const supportStaff = orderedEmployees.filter(employee => employee.role === "事務員" || employee.role === "登録販売者");
+  const unassignedStaff = orderedEmployees.filter(employee => !employee.role);
+  const renderRoster = (group: Employee[]) => group.map(employee => {
+    const shift = employee.shifts.find(item => item.date === selectedDate);
+    const label = shiftLabel(employee, selectedDate);
+    const isOff = label === "休み" || label === "有休";
+    if (!shift?.shift || isOff) return null;
+    return <button key={employee.id} className="home-roster-row" onClick={() => onEmployeeSelect(employee.id)}><span className="home-employee-name">{employee.displayName || employee.name}</span><span className="home-shift-value">{label}</span><ChevronRight className="w-4 h-4 text-slate-300" /></button>;
+  });
 
   return (
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
@@ -117,21 +126,10 @@ export function HomeView({
         </div>
         {selectedRemark && selectedRemark.type !== "なし" && <div className="home-remark">{selectedRemark.type}{selectedRemark.text ? `：${selectedRemark.text}` : ""}</div>}
         <div className="grid grid-cols-2 gap-3">
-          {[orderedEmployees.filter(isPharmacist), orderedEmployees.filter(e => !isPharmacist(e))].map((group, groupIndex) => <div key={groupIndex} className={groupIndex ? "border-l pl-3" : ""}>
-          {group.map(employee => {
-            const shift = employee.shifts.find(item => item.date === selectedDate);
-            const label = shiftLabel(employee, selectedDate);
-            const isOff = label === "休み" || label === "有休";
-            if (!shift?.shift || isOff) return null;
-            return (
-              <button key={employee.id} className="home-roster-row" onClick={() => onEmployeeSelect(employee.id)}>
-                <span className="home-employee-name">{employee.displayName || employee.name}</span>
-                <span className="home-shift-value">{label}</span>
-                <ChevronRight className="w-4 h-4 text-slate-300" />
-              </button>
-            );
-          })}</div>)}
+          <div>{renderRoster(pharmacists)}</div>
+          <div className="border-l pl-3">{renderRoster(supportStaff)}</div>
         </div>
+        {unassignedStaff.length > 0 && <div className="home-role-warning">役職未設定：{unassignedStaff.map(employee => employee.displayName || employee.name).join("、")}（設定画面で役職を登録してください）</div>}
         <Button variant="outline" className="w-full mt-3 h-10 font-bold" onClick={onShowDashboard}>月の全体シフトを見る <ArrowRight className="w-4 h-4 ml-2" /></Button>
       </section>
 

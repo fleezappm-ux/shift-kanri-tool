@@ -25,7 +25,7 @@ import {
   ListChecks,
   CalendarDays,
   SlidersHorizontal
-  ,MessageSquareText, UserRound, CalendarClock
+  ,MessageSquareText, UserRound, CalendarClock, Smartphone
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
@@ -1835,6 +1835,7 @@ export default function App() {
       <main className={`shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6 ${activeTab === "dashboard" ? "dashboard-active" : ""}`}>
         {activeTab !== "home" && activeTab !== "admin" && (
         <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
+          {activeTab !== "dashboard" && <>
           <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
             <Button
               variant="ghost"
@@ -1970,6 +1971,7 @@ export default function App() {
               <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
+          </>}
 
           {isFromAdmin && activeTab !== "admin" && (
             <div className="admin-header-actions flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
@@ -2062,19 +2064,23 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Card className={`dashboard-card border-border shadow-none md:h-full md:min-h-0 md:flex md:flex-col ${dashboardListView ? "dashboard-list-view" : ""}`}>
-                  <CardHeader className="dashboard-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 group">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <CardTitle className="text-xl font-black">{dashboardTitle}</CardTitle>
-                          <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{periodStatusLoading ? "確認中…" : isLocked ? "確定シフト" : "シフト案・作成中"}</Badge>
-                        </div>
+                  <CardHeader className="dashboard-card-header dashboard-blue-header page-blue-header border-b border-border">
+                    <div className="dashboard-blue-top">
+                      <div className="dashboard-blue-brand">
+                        <img src="/shift-kanri-tool/icon-192.png" alt="" />
+                        <div><small>PHARMACY SHIFT</small><CardTitle>薬局シフト</CardTitle><span><UserRound className="h-3.5 w-3.5" />操作員：{appSession.employeeName || "未選択"}</span></div>
                       </div>
-                      <CardDescription className="dashboard-period-label">
-                        {dateRange.length > 0 ? `${format(dateRange[0], "yyyy/MM/dd")} - ${format(dateRange[dateRange.length - 1], "MM/dd")}` : "期間未設定"}
-                      </CardDescription>
+                      <div className="dashboard-blue-period">
+                        {dateRange.length > 0 ? `${format(dateRange[0], "yyyy年M月d日")}〜${format(dateRange[dateRange.length - 1], "M月d日")}` : "期間未設定"}
+                      </div>
+                      <button className="dashboard-install-button" onClick={installToHomeScreen}><Smartphone className="h-4 w-4" />デスクトップに追加</button>
                     </div>
-                    <div className="dashboard-card-actions flex items-center gap-2">
+                    <div className="dashboard-blue-controls">
+                      <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
+                      <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
+                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><strong>{dashboardTitle}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
+                      <label><span>名前</span><select value="dashboard" onChange={event => { if (event.target.value !== "dashboard") { setActiveTab(event.target.value); setIsFromAdmin(false); } }}><option value="dashboard">全員</option>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
+                      <div className="dashboard-card-actions flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
@@ -2083,6 +2089,7 @@ export default function App() {
                       >
                         <Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示に戻す" : "一覧表示"}
                       </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 md:flex-1 md:min-h-0 md:flex md:flex-col">

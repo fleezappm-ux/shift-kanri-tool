@@ -81,7 +81,7 @@ import { MyPage } from "./components/MyPage";
 import { AutoDraftSettings as AutoDraftSettingsView } from "./components/AutoDraftSettings";
 import { fetchAutoDraftSettings, saveAutoDraftSettings } from "./lib/auto-draft-sync";
 
-const DEFAULT_EMPLOYEES = ["降旗", "藤川", "金井", "本道", "児玉"];
+const DEFAULT_EMPLOYEES: string[] = [];
 const PLACEHOLDER_EMPLOYEE_PATTERN = /^従業員[Ａ-ＺA-Zａ-ｚa-z０-９0-9]+$/;
 const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
 
@@ -399,14 +399,18 @@ export default function App() {
     if (!appSession?.token) return;
     let cancelled = false;
     (async () => {
-      const merged = await fetchShiftsFromServer(employees);
-      if (!cancelled) {
-        if (merged) {
-          const master = await fetchEmployeeMaster(merged.employees.map(employee => employee.name));
-          if (cancelled) return;
-          setEmployeeMaster(master);
+      try {
+        const merged = await fetchShiftsFromServer(employees);
+        if (cancelled) return;
+        const sourceEmployees = merged?.employees || employees;
+        const master = await fetchEmployeeMaster(sourceEmployees.map(employee => employee.name));
+        if (cancelled) return;
+        setEmployeeMaster(master);
+        if (master.length || merged) {
           skipDirtyRef.current = true;
-          setEmployees(master.length ? mergeEmployeesWithMaster(merged.employees, master) : merged.employees);
+          setEmployees(master.length ? mergeEmployeesWithMaster(sourceEmployees, master) : sourceEmployees);
+        }
+        if (merged) {
           // GAS更新前のDBには全体補足プロパティがないため、その間は端末内の既存補足を消さない。
           if (merged.supportsGlobalRemarks) {
             skipRemarkDirtyRef.current = true;
@@ -421,6 +425,13 @@ export default function App() {
         syncReadyRef.current = true;
         setSyncState(merged ? "saved" : "offline");
         setInitialSyncComplete(true);
+      } catch (error) {
+        console.error("初期同期に失敗しました", error);
+        if (!cancelled) {
+          syncReadyRef.current = true;
+          setSyncState("offline");
+          setInitialSyncComplete(true);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -692,8 +703,8 @@ export default function App() {
   const cachedLoginEmployees = employees.filter(item => !PLACEHOLDER_EMPLOYEE_PATTERN.test(item.displayName || item.name));
   const loginEmployees: EmployeeMasterItem[] = masterLoginEmployees.length
     ? masterLoginEmployees
-    : (cachedLoginEmployees.length ? cachedLoginEmployees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員") }))
-      : DEFAULT_EMPLOYEES.map((name, index) => ({ id: `default-${index + 1}`, name, displayName: name, displayOrder: index + 1, active: true, aliases: [], role: (["降旗", "藤川", "金井"].includes(name) ? "薬剤師" : "事務員") as EmployeeMasterItem["role"] })));
+    : (cachedLoginEmployees.length ? cachedLoginEmployees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || "事務員" }))
+      : []);
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];
@@ -1594,6 +1605,7 @@ export default function App() {
   };
 
   if (!appSession) return <><ShiftLogin employees={loginEmployees} onLogin={session => { setAppSession(session); toast.success(session.role === "admin" ? "編集者としてログインしました" : "ログインしました"); }} /><Toaster position="top-center" /></>;
+  if (!initialSyncComplete) return <main className="flex min-h-screen items-center justify-center bg-slate-50"><div className="rounded-2xl bg-white px-8 py-7 text-center shadow-xl"><div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" /><strong className="text-slate-800">従業員マスターを同期しています</strong><p className="mt-2 text-xs text-slate-500">役職情報を確認してから表示します</p></div></main>;
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="shift-shell flex h-screen w-full overflow-hidden bg-background text-foreground font-sans">

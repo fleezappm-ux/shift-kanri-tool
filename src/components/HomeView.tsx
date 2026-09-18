@@ -21,6 +21,7 @@ interface HomeViewProps {
   onEmployeeSelect: (employeeId: string) => void;
   onOpenLeaveRequest: () => void;
   onInstall: () => void;
+  installLabel: string;
   operatorName: string;
   requests: LeaveRequest[];
   boardMonthLabel: string;
@@ -53,7 +54,7 @@ function shiftLabel(employee: Employee, date: string): string {
 
 export function HomeView({
   employees, remarks, weekDates, selectedDate, today, weekOffset, heatmapEnabled, monthDates,
-  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest, onInstall,
+  onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest, onInstall, installLabel,
   operatorName, requests, boardMonthLabel, boardLocked, isEditor, onOpenBoard
 }: HomeViewProps) {
   const orderedEmployees = sortEmployeesForDisplay(employees);
@@ -85,7 +86,7 @@ export function HomeView({
           </div>
           <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
         </div>
-        <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>ホーム画面に追加</span></button>
+        <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>{installLabel}</span></button>
       </header>
 
       <div className="home-week-grid">

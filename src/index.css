@@ -35,6 +35,7 @@ body { margin:0; background:#f5f7fa; }
 .home-brand-header img { width:50px; height:50px; padding:5px; border-radius:15px; background:rgba(255,255,255,.16); box-shadow:inset 0 0 0 1px rgba(255,255,255,.2); }
 .home-brand-header span { display:block; font-size:10px; font-weight:800; letter-spacing:.16em; opacity:.8; }
 .home-brand-header h1 { margin:2px 0 0; font-size:24px; line-height:1; font-weight:900; letter-spacing:.02em; }
+.home-brand-copy{position:relative;z-index:2}.home-title-line{display:flex;align-items:center;gap:14px;margin-top:3px}.home-title-line h1{margin:0}.home-brand-header .home-operator{display:flex;align-items:center;gap:5px;padding-left:14px;border-left:1px solid rgba(255,255,255,.45);color:#fff;font-size:12px;font-weight:800;letter-spacing:0;opacity:.94}
 .home-install-button{position:relative;z-index:2;display:flex;align-items:center;gap:6px;margin-left:auto;padding:9px 12px;border:1px solid rgba(255,255,255,.48);border-radius:10px!important;color:#fff;background:rgba(255,255,255,.14);font-size:11px;font-weight:850;backdrop-filter:blur(5px)}.home-install-button:hover{background:rgba(255,255,255,.24)}.home-install-button span{font-size:11px!important;letter-spacing:0!important;opacity:1!important}
 .admin-header-actions{flex-wrap:wrap;justify-content:flex-end}
 .shift-bottom-nav { background:#fff!important; box-shadow:0 -10px 28px rgba(15,23,42,.12); isolation:isolate; }
@@ -55,6 +56,7 @@ body { margin:0; background:#f5f7fa; }
 .page-blue-header [data-slot="card-title"],.page-blue-header [data-slot="card-description"],.page-blue-header svg { color:#fff!important; }
 .page-blue-header [data-slot="card-description"] { opacity:.82; }
 .dashboard-period-label { margin-top:4px; font-size:13px!important; font-weight:700; letter-spacing:.02em; }
+.dashboard-blue-header{display:block!important;padding:16px 20px!important}.dashboard-blue-top{display:grid;grid-template-columns:minmax(230px,1fr) minmax(310px,1.35fr) minmax(210px,1fr);align-items:center;gap:16px}.dashboard-blue-brand{display:flex;align-items:center;gap:11px;min-width:0}.dashboard-blue-brand img{width:45px;height:45px;padding:5px;border-radius:13px;background:rgba(255,255,255,.16);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}.dashboard-blue-brand small{display:block;font-size:9px;font-weight:800;letter-spacing:.14em;opacity:.78}.dashboard-blue-brand [data-slot="card-title"]{font-size:23px!important;line-height:1.05}.dashboard-blue-brand span{display:flex;align-items:center;gap:4px;margin-top:5px;color:#fff;font-size:11px;font-weight:750;opacity:.9}.dashboard-blue-period{text-align:center;font-size:23px;font-weight:900;letter-spacing:.02em;white-space:nowrap}.dashboard-install-button{display:flex;align-items:center;justify-self:end;gap:6px;padding:9px 12px;border:1px solid rgba(255,255,255,.5);border-radius:10px!important;color:#fff;background:rgba(255,255,255,.14);font-size:11px;font-weight:800}.dashboard-install-button:hover{background:rgba(255,255,255,.24)}.dashboard-blue-controls{display:grid;grid-template-columns:115px 105px minmax(280px,1fr) 150px auto;align-items:end;gap:10px;margin-top:14px;padding-top:13px;border-top:1px solid rgba(255,255,255,.26)}.dashboard-blue-controls label{display:grid;gap:4px}.dashboard-blue-controls label>span{color:#fff;font-size:10px;font-weight:800;opacity:.85}.dashboard-blue-controls select{width:100%;height:38px;padding:0 9px;border:1px solid rgba(255,255,255,.56);border-radius:9px;background:#fff;color:#17345b;font-size:12px;font-weight:800}.dashboard-period-step{display:grid;grid-template-columns:92px 1fr 92px;align-items:center;gap:8px}.dashboard-period-step strong{text-align:center;color:#fff;font-size:16px;font-weight:900}.dashboard-period-step button{height:38px!important;border-color:rgba(255,255,255,.55)!important;background:rgba(255,255,255,.14)!important;color:#fff!important}.dashboard-blue-controls .dashboard-card-actions{justify-content:flex-end;max-width:none}.dashboard-blue-controls .dashboard-list-toggle{height:38px!important}
 .dashboard-card-actions{flex-wrap:wrap;justify-content:flex-end;max-width:68%}
 .dashboard-card-actions>[data-slot="badge"],.dashboard-card-actions>button{flex:0 0 auto;white-space:nowrap}
 .shift-editor-heading{display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid #bfdbfe;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f8fbff);color:#0f3f86}
@@ -125,7 +127,7 @@ body { margin:0; background:#f5f7fa; }
 .home-roster-count { display:flex; align-items:center; gap:6px; color:#1d4ed8; background:#eff6ff; border-radius:999px; padding:7px 11px; font-size:12px; font-weight:800; }
 .home-remark { margin-bottom:10px; padding:8px 10px; border-radius:9px; background:#fff1f2; color:#be123c; font-size:12px; font-weight:700; }
 .home-roster-list { border-top:1px solid #e8edf3; }
-.home-roster-row { width:100%; display:grid; grid-template-columns:minmax(72px,1fr) minmax(100px,1.5fr) minmax(90px,1fr) 18px; align-items:center; gap:10px; padding:13px 4px; border-bottom:1px solid #eef2f6; text-align:left; background:#fff; }
+.home-roster-row { width:100%; display:grid; grid-template-columns:minmax(72px,1fr) minmax(110px,1.45fr) 18px; align-items:center; gap:10px; padding:13px 4px; border-bottom:1px solid #eef2f6; text-align:left; background:#fff; }
 .home-roster-row:hover { background:#f8fafc; }
 .home-employee-name { color:#172033; font-size:15px; font-weight:800; }
 .home-shift-value { color:#075985; font-size:14px; font-weight:800; }
@@ -158,6 +160,7 @@ body { margin:0; background:#f5f7fa; }
   .shift-person-tabs,.shift-tab-arrows{display:none!important}
   .dashboard-card{gap:0!important;padding-bottom:0!important;border-radius:14px!important;overflow:hidden!important}
   .dashboard-card-header{padding:13px 12px!important;min-height:68px;align-items:center!important}
+  .dashboard-blue-header{padding:13px 12px!important}.dashboard-blue-top{grid-template-columns:1fr auto;gap:10px}.dashboard-blue-brand img{width:40px;height:40px}.dashboard-blue-brand [data-slot="card-title"]{font-size:18px!important}.dashboard-blue-brand small{display:none}.dashboard-blue-brand span{font-size:10px}.dashboard-blue-period{grid-column:1/-1;grid-row:2;text-align:center;font-size:18px}.dashboard-install-button{width:40px;height:40px;padding:0;justify-content:center;font-size:0}.dashboard-blue-controls{grid-template-columns:1fr 1fr;gap:8px;margin-top:11px;padding-top:11px}.dashboard-period-step{grid-column:1/-1;grid-template-columns:82px 1fr 82px}.dashboard-period-step strong{font-size:14px}.dashboard-blue-controls label:nth-of-type(3){grid-column:1/-1}.dashboard-blue-controls .dashboard-card-actions{display:none}
   .dashboard-card-header h3{font-size:16px!important}
   .dashboard-card-header p{font-size:12px!important}
   .dashboard-card-meta{display:none!important}
@@ -193,6 +196,7 @@ body { margin:0; background:#f5f7fa; }
   .home-toolbar{gap:5px}
   .home-brand-header{min-height:82px;padding:15px 17px;border-radius:15px}
   .home-brand-header img{width:45px;height:45px}.home-brand-header h1{font-size:22px}
+  .home-brand-header .home-operator{padding-left:8px;font-size:10px}.home-title-line{gap:8px}
   .home-install-button{padding:9px}.home-install-button span{display:none!important}
   .admin-header-actions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:6px!important;padding:7px!important}.admin-header-actions>button{width:100%;height:38px!important;font-size:11px!important}.admin-header-actions>div{grid-column:1/-1;justify-content:center;flex-wrap:wrap}.admin-header-actions>div>button{height:36px!important}
   .home-week-button{height:36px!important;padding:0 9px!important;font-size:12px!important}
@@ -201,7 +205,7 @@ body { margin:0; background:#f5f7fa; }
   .home-day span{font-size:11px}.home-day strong{font-size:17px}.home-day small{font-size:10px}
   .home-roster{padding:14px 12px;border-radius:14px}
   .home-roster-header h2{font-size:19px}
-  .home-roster-row{grid-template-columns:58px minmax(90px,1fr) 84px 14px;gap:6px;padding:13px 2px}
+  .home-roster-row{grid-template-columns:58px minmax(96px,1fr) 14px;gap:6px;padding:13px 2px}
   .home-employee-name{font-size:14px}.home-shift-value{font-size:13px}.home-work-time{font-size:11px}
   .admin-shift-entry{align-items:stretch;flex-direction:column;padding:16px;gap:12px}
   .admin-shift-entry button{width:100%}

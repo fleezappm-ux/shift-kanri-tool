@@ -68,12 +68,14 @@ export function HomeView({
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
       <header className="home-brand-header">
         <img src="/shift-kanri-tool/icon-192.png" alt="" />
-        <div>
+        <div className="home-brand-copy">
           <span>PHARMACY SHIFT</span>
-          <h1>薬局シフト</h1>
+          <div className="home-title-line">
+            <h1>薬局シフト</h1>
+            <span className="home-operator"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
+          </div>
         </div>
         <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>ホーム画面に追加</span></button>
-        <span className="ml-auto flex items-center gap-1 text-xs font-bold text-slate-500"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
       </header>
       <div className="home-toolbar">
         <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /> 前週</Button>
@@ -119,6 +121,7 @@ export function HomeView({
             return (
               <button key={employee.id} className="home-roster-row" onClick={() => onEmployeeSelect(employee.id)}>
                 <span className="home-employee-name">{employee.displayName || employee.name}</span>
+                <span className="home-shift-value">{label}</span>
                 <ChevronRight className="w-4 h-4 text-slate-300" />
               </button>
             );

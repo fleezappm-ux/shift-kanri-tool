@@ -67,12 +67,14 @@ export function HomeView({
   return (
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
       <header className="home-brand-header">
-        <img src="/shift-kanri-tool/icon-192.png" alt="" />
-        <div className="home-brand-copy">
-          <span>PHARMACY SHIFT</span>
-          <div className="home-title-line">
-            <h1>薬局シフト</h1>
-            <span className="home-operator"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
+        <div className="home-brand-cluster">
+          <img src="/shift-kanri-tool/icon-192.png" alt="" />
+          <div className="home-brand-copy">
+            <span>PHARMACY SHIFT</span>
+            <div className="home-title-line">
+              <h1>薬局シフト</h1>
+              <span className="home-operator"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
+            </div>
           </div>
         </div>
         <div className="home-header-week">
@@ -107,8 +109,9 @@ export function HomeView({
 
       <section className="home-roster">
         <div className="home-roster-header">
-          <div><p>{format(selectedDateObject, "M月d日")}（{WEEKDAYS[selectedDateObject.getDay()]}）</p><h2>{selectedDate === today ? "今日のシフト" : "この日のシフト"}</h2></div>
-          <div className="home-roster-count"><Users className="w-4 h-4" /> 出勤 {workingCount}人</div>
+          <div className="home-roster-heading"><h2>{selectedDate === today ? "今日のシフト" : "この日のシフト"}</h2><div className="home-roster-count"><Users className="w-4 h-4" /> 出勤 {workingCount}人</div></div>
+          <p className="home-roster-date">{format(selectedDateObject, "M月d日")}（{WEEKDAYS[selectedDateObject.getDay()]}）</p>
+          <span className="home-roster-header-spacer" aria-hidden="true" />
         </div>
         {selectedRemark && selectedRemark.type !== "なし" && <div className="home-remark">{selectedRemark.type}{selectedRemark.text ? `：${selectedRemark.text}` : ""}</div>}
         <div className="grid grid-cols-2 gap-3">

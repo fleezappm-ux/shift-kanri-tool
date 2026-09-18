@@ -31,7 +31,7 @@ export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterIt
   return <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 p-5 font-sans">
     <section className="w-full max-w-md rounded-3xl border border-white/80 bg-white p-7 shadow-2xl shadow-blue-950/10">
       <div className="mb-6 flex items-center gap-4"><img className="h-14 w-14 rounded-2xl shadow-sm" src="/shift-kanri-tool/icon-192.png" alt="" /><div><span className="text-[11px] font-black tracking-[.18em] text-blue-600">PHARMACY SHIFT</span><h1 className="text-2xl font-black text-slate-900">シフト管理</h1></div></div>
-      <div className="mb-5 flex items-start gap-3 rounded-2xl bg-blue-50 p-4 text-sm text-blue-950"><LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" /><p className="leading-6">一般用または編集者用のIDでログインしてください。ログイン状態はこの端末に30日間保存されます。</p></div>
+      <div className="mb-5 flex items-start gap-3 rounded-2xl bg-blue-50 p-4 text-sm text-blue-950"><LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" /><p className="leading-6">一般用または編集者用のIDでログインし、今回操作する人の名前を必ず選択してください。</p></div>
       <label className="text-xs font-bold text-slate-600">ログインID</label><Input value={loginId} onChange={event => setLoginId(event.target.value)} autoComplete="username" className="mt-2 h-12 rounded-xl" />
       <label className="mt-4 block text-xs font-bold text-slate-600">パスワード</label><Input type="password" value={password} onChange={event => setPassword(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void submit(); }} autoComplete="current-password" className="mt-2 h-12 rounded-xl" />
       <label className="mt-4 block text-xs font-bold text-slate-600">操作する人</label>

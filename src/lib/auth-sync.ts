@@ -69,17 +69,10 @@ export async function loginEditor(loginId: string, password: string, employeeId:
 }
 
 export async function loginShift(loginId: string, password: string, employeeId: string, employeeName: string): Promise<ShiftSession> {
-  const payload = { loginId, password, employeeId, employeeName };
-  const [employeeResult, adminResult] = await Promise.allSettled([
-    call("loginShiftEmployee", payload),
-    call("loginShiftAdmin", payload)
-  ]);
-  const result = adminResult.status === "fulfilled" ? adminResult : employeeResult;
-  if (result.status === "rejected") {
-    const error = employeeResult.status === "rejected" ? employeeResult.reason : result.reason;
-    throw error instanceof Error ? error : new Error("IDまたはパスワードを確認してください");
-  }
-  const session = result.value.session as ShiftSession;
+  // 一般用・編集者用をフロントから2本同時送信すると、GAS側でセッション保存が競合します。
+  // 認証種別の判定はGAS側の loginShift に一本化し、1回の通信でログインします。
+  const json = await call("loginShift", { loginId, password, employeeId, employeeName });
+  const session = json.session as ShiftSession;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }

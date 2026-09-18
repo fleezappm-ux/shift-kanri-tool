@@ -31,18 +31,9 @@ interface HomeViewProps {
 }
 
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
-export const EMPLOYEE_DISPLAY_ORDER = ["降旗", "藤川", "金井", "本道", "児玉"];
-
 export function sortEmployeesForDisplay(employees: Employee[]): Employee[] {
-  return [...employees].sort((a, b) => {
-    if (a.displayOrder != null || b.displayOrder != null) return (a.displayOrder ?? 999) - (b.displayOrder ?? 999);
-    const aIndex = EMPLOYEE_DISPLAY_ORDER.indexOf(a.name);
-    const bIndex = EMPLOYEE_DISPLAY_ORDER.indexOf(b.name);
-    if (aIndex < 0 && bIndex < 0) return 0;
-    if (aIndex < 0) return 1;
-    if (bIndex < 0) return -1;
-    return aIndex - bIndex;
-  });
+  // 店舗固有の氏名ではなく、共有従業員マスターの並び順だけを正本にします。
+  return [...employees].sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
 }
 
 function shiftLabel(employee: Employee, date: string): string {

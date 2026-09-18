@@ -10,7 +10,7 @@ export interface EmployeeMasterItem {
   displayOrder: number;
   active: boolean;
   aliases: string[];
-  role: EmployeeRole;
+  role?: EmployeeRole;
 }
 
 async function call(action: string, payload: Record<string, unknown> = {}) {

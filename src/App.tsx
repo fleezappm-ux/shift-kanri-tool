@@ -355,21 +355,25 @@ export default function App() {
     toast.success("今日を含む当月シフトへ戻りました");
   };
 
+  const installLabel = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? "ホーム画面に追加" : "デスクトップに追加";
+
   const installToHomeScreen = async () => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
     if (standalone) return toast.info("すでにホーム画面から起動しています");
     if (installPrompt) {
       await installPrompt.prompt();
       const choice = await installPrompt.userChoice;
-      if (choice.outcome === "accepted") toast.success("ホーム画面へ追加しました");
+      if (choice.outcome === "accepted") toast.success(`${installLabel}しました`);
       setInstallPrompt(null);
       return;
     }
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
     if (isIOS) {
       window.alert("iPhoneへの追加方法\n\n1. Safari下部の共有ボタン（□↑）を押す\n2.『ホーム画面に追加』を押す\n3. 右上の『追加』を押す");
-    } else {
+    } else if (/Android|Mobile/i.test(navigator.userAgent)) {
       window.alert("ブラウザのメニュー（︙）を開き、『ホーム画面に追加』または『アプリをインストール』を押してください。");
+    } else {
+      window.alert("ブラウザ右上のインストールアイコン、またはメニュー（︙）から『アプリをインストール』を選んでください。");
     }
   };
 
@@ -1703,8 +1707,8 @@ export default function App() {
               </Button>
               {appSession.role === "employee" && <>
                 <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("board")}><MessageSquareText className="mr-3 h-4 w-4 text-amber-600" />お知らせ掲示板</Button>
-                <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("requests")}><CalendarDays className="mr-3 h-4 w-4 text-pink-600" />休み希望日提出</Button>
                 <Button variant="outline" className="w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("mypage")}><UserRound className="mr-3 h-4 w-4 text-blue-600" />マイページ</Button>
+                <Button variant="outline" className="sidebar-leave-button w-full justify-start h-12 px-4 text-sm font-semibold" onClick={() => setActiveTab("requests")}><CalendarDays className="mr-3 h-4 w-4" />休み希望日提出</Button>
               </>}
             </div>
           </section>
@@ -1833,7 +1837,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className={`shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6 ${activeTab === "dashboard" ? "dashboard-active" : ""}`}>
-        {activeTab !== "home" && activeTab !== "admin" && (
+        {(activeTab === "board" || activeTab === "mypage") && (
         <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
           {activeTab !== "dashboard" && <>
           <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
@@ -2041,6 +2045,7 @@ export default function App() {
                 onEmployeeSelect={(employeeId) => { setActiveTab(employeeId); setIsFromAdmin(false); }}
                 onOpenLeaveRequest={() => { setActiveTab("requests"); setIsFromAdmin(false); }}
                 onInstall={installToHomeScreen}
+                installLabel={installLabel}
                 operatorName={appSession.employeeName || "未選択"}
                 requests={homeBoardRequests}
                 boardMonthLabel={format(homeBoardMonth, "yyyy年M月")}
@@ -2073,7 +2078,7 @@ export default function App() {
                       <div className="dashboard-blue-period">
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy年M月d日")}〜${format(dateRange[dateRange.length - 1], "M月d日")}` : "期間未設定"}
                       </div>
-                      <button className="dashboard-install-button" onClick={installToHomeScreen}><Smartphone className="h-4 w-4" />デスクトップに追加</button>
+                      <button className="dashboard-install-button" onClick={installToHomeScreen}><Smartphone className="h-4 w-4" />{installLabel}</button>
                     </div>
                     <div className="dashboard-blue-controls">
                       <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
@@ -2420,13 +2425,21 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                   >
                     <Card className="employee-shift-card border-border shadow-none">
-                      <CardHeader className="employee-card-header page-blue-header py-4 border-b border-border flex flex-row items-center justify-between">
-                        <div>
+                      <CardHeader className="employee-card-header employee-blue-header page-blue-header border-b border-border">
+                        <div className="employee-blue-top">
+                          <div>
                           <div className="flex items-center gap-2 group">
                             <CardTitle className="text-base">{emp.displayName || emp.name} の個人シート</CardTitle>
                           </div>
+                          </div>
+                          <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
                         </div>
-                        <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
+                        <div className="employee-blue-controls">
+                          <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
+                          <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
+                          <div className="employee-month-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><strong>{format(dateRange[0], "M月d日")}〜{format(dateRange[dateRange.length - 1], "M月d日")}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
+                          <label><span>名前</span><select value={emp.id} onChange={event => setActiveTab(event.target.value)}>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
+                        </div>
                       </CardHeader>
                       <CardContent className="p-0">
                         {isFromAdmin && (

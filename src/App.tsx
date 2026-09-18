@@ -69,7 +69,7 @@ import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
-import { getManagementApiKey, getShiftSession, logoutShiftSession, saveManagementApiKey, ShiftSession } from "./lib/auth-sync";
+import { getManagementApiKey, logoutShiftSession, saveManagementApiKey, ShiftSession } from "./lib/auth-sync";
 import { DropdownMasterSettings } from "./components/DropdownMasterSettings";
 import { DEFAULT_STORE_MASTER, StoreMaster, StoreMasterSettings } from "./components/StoreMasterSettings";
 import { ShiftLogin } from "./components/ShiftLogin";
@@ -103,7 +103,10 @@ function getCurrentShiftMonth(today = new Date(), settings = DEFAULT_CALENDAR_PE
 }
 
 export default function App() {
-  const [appSession, setAppSession] = useState<ShiftSession | null>(() => getShiftSession());
+  const [appSession, setAppSession] = useState<ShiftSession | null>(() => {
+    logoutShiftSession();
+    return null;
+  });
   const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations" | "autodraft">("menu");
   const [storeMaster, setStoreMaster] = useState<StoreMaster>(() => {
     const saved = localStorage.getItem("store_master_settings");
@@ -493,6 +496,10 @@ export default function App() {
   const toggleLock = async () => {
     if (!dateRange.length || periodStatusLoading) return;
     const nextLocked = !isLocked;
+    const confirmed = window.confirm(nextLocked
+      ? "このシフト案を確定しますか？\n\n確定後は一般ユーザーへ確定シフトとして表示され、通常の編集はできなくなります。"
+      : "確定シフトを解除して、シフト案・編集中に戻しますか？");
+    if (!confirmed) return;
     if (nextLocked) {
       const conflicts = dateRange.reduce((total, date) => {
         const remark = getGlobalRemark(date);
@@ -2069,7 +2076,7 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Card className={`dashboard-card border-border shadow-none md:h-full md:min-h-0 md:flex md:flex-col ${dashboardListView ? "dashboard-list-view" : ""}`}>
-                  <CardHeader className="dashboard-card-header dashboard-blue-header page-blue-header border-b border-border">
+                  <CardHeader className={`dashboard-card-header dashboard-blue-header page-blue-header border-b border-border ${isLocked ? "is-final" : "is-draft"}`}>
                     <div className="dashboard-blue-top">
                       <div className="dashboard-blue-brand">
                         <img src="/shift-kanri-tool/icon-192.png" alt="" />
@@ -2083,7 +2090,7 @@ export default function App() {
                     <div className="dashboard-blue-controls">
                       <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
                       <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
-                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><div className="dashboard-period-title"><strong>{dashboardTitle}</strong><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button></div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
+                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><div className="dashboard-period-title"><div className="dashboard-title-status"><strong>{dashboardTitle}</strong><span>{isLocked ? "確定シフト" : "シフト案・編集中"}</span></div><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button>{isFromAdmin && <Button disabled={periodStatusLoading} size="sm" className={`dashboard-lock-button ${isLocked ? "is-unlock" : ""}`} onClick={toggleLock}>{isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{periodStatusLoading ? "処理中…" : isLocked ? "確定を解除" : "シフトを確定"}</Button>}</div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
                       <label><span>名前</span><select value="dashboard" onChange={event => { if (event.target.value !== "dashboard") { setActiveTab(event.target.value); setIsFromAdmin(false); } }}><option value="dashboard">全員</option>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
                     </div>
                   </CardHeader>

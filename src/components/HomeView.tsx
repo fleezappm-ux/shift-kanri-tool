@@ -64,6 +64,7 @@ export function HomeView({
     const label = shiftLabel(employee, selectedDate);
     return label !== "未入力" && label !== "休み" && label !== "有休";
   }).length;
+  const isPharmacist = (employee: Employee) => employee.role === "薬剤師" || ["降旗", "藤川", "金井"].includes(employee.displayName || employee.name);
 
   return (
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
@@ -116,7 +117,7 @@ export function HomeView({
         </div>
         {selectedRemark && selectedRemark.type !== "なし" && <div className="home-remark">{selectedRemark.type}{selectedRemark.text ? `：${selectedRemark.text}` : ""}</div>}
         <div className="grid grid-cols-2 gap-3">
-          {[orderedEmployees.filter(e => e.role === "薬剤師"), orderedEmployees.filter(e => e.role !== "薬剤師")].map((group, groupIndex) => <div key={groupIndex} className={groupIndex ? "border-l pl-3" : ""}>
+          {[orderedEmployees.filter(isPharmacist), orderedEmployees.filter(e => !isPharmacist(e))].map((group, groupIndex) => <div key={groupIndex} className={groupIndex ? "border-l pl-3" : ""}>
           {group.map(employee => {
             const shift = employee.shifts.find(item => item.date === selectedDate);
             const label = shiftLabel(employee, selectedDate);

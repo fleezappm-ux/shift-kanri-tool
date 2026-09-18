@@ -140,6 +140,7 @@ body { margin:0; background:#f5f7fa; }
 .home-shift-value { color:#075985; font-size:14px; font-weight:800; }
 .home-shift-value.is-off { color:#94a3b8; }
 .home-work-time { min-height:18px; display:flex; align-items:center; gap:4px; color:#64748b; font-size:12px; }
+.home-role-warning{margin-top:10px;padding:9px 11px;border:1px solid #fbbf24;border-radius:9px;background:#fffbeb;color:#92400e;font-size:11px;font-weight:800}
 @media(max-width:900px){
   .dashboard-list-toggle{display:none!important}
   .shift-shell{flex-direction:column;height:auto!important;min-height:100vh;overflow:visible!important}

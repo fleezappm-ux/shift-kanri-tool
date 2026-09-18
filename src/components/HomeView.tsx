@@ -75,16 +75,16 @@ export function HomeView({
             <span className="home-operator"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
           </div>
         </div>
+        <div className="home-header-week">
+          <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /> 前週</Button>
+          <div className="home-header-period">
+            <strong>{format(weekDates[0], "M月d日")}〜{format(weekDates[6], "M月d日")}</strong>
+            {weekOffset !== 0 && <button onClick={() => onWeekOffsetChange(0)}>今週へ戻る</button>}
+          </div>
+          <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
+        </div>
         <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>ホーム画面に追加</span></button>
       </header>
-      <div className="home-toolbar">
-        <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset - 1)}><ChevronLeft className="w-4 h-4" /> 前週</Button>
-        <div className="text-center">
-          <div className="text-sm font-black text-slate-800">{format(weekDates[0], "M/d")}〜{format(weekDates[6], "M/d")}</div>
-          {weekOffset !== 0 && <button className="text-xs text-blue-600 font-semibold" onClick={() => onWeekOffsetChange(0)}>今週へ戻る</button>}
-        </div>
-        <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
-      </div>
 
       <div className="home-week-grid">
         {weekDates.map(date => {

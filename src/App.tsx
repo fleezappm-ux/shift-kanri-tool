@@ -81,7 +81,8 @@ import { MyPage } from "./components/MyPage";
 import { AutoDraftSettings as AutoDraftSettingsView } from "./components/AutoDraftSettings";
 import { fetchAutoDraftSettings, saveAutoDraftSettings } from "./lib/auto-draft-sync";
 
-const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
+const DEFAULT_EMPLOYEES = ["降旗", "藤川", "金井", "本道", "児玉"];
+const PLACEHOLDER_EMPLOYEE_PATTERN = /^従業員[Ａ-ＺA-Zａ-ｚa-z０-９0-9]+$/;
 const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
 
 interface BeforeInstallPromptEvent extends Event {
@@ -395,6 +396,7 @@ export default function App() {
   const skipDirtyRef = useRef(false);
   const skipRemarkDirtyRef = useRef(false);
   useEffect(() => {
+    if (!appSession?.token) return;
     let cancelled = false;
     (async () => {
       const merged = await fetchShiftsFromServer(employees);
@@ -422,8 +424,9 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
+    // ログイン後に共有データと従業員マスターを取得し、端末内の古い役職情報を上書きします。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [appSession?.token]);
 
   // 編集内容はまず端末内へ保存し、Notionへの反映は「Notionへ保存」ボタンでだけ行います。
   useEffect(() => {
@@ -685,7 +688,12 @@ export default function App() {
   const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
   const dashboardEmployees = sortEmployeesForDisplay(employees);
   const operatorEmployee = dashboardEmployees.find(item => item.id === appSession?.employeeId || (item.displayName || item.name) === appSession?.employeeName);
-  const loginEmployees: EmployeeMasterItem[] = employeeMaster.length ? employeeMaster : employees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員") }));
+  const masterLoginEmployees = employeeMaster.filter(item => !PLACEHOLDER_EMPLOYEE_PATTERN.test(item.displayName || item.name));
+  const cachedLoginEmployees = employees.filter(item => !PLACEHOLDER_EMPLOYEE_PATTERN.test(item.displayName || item.name));
+  const loginEmployees: EmployeeMasterItem[] = masterLoginEmployees.length
+    ? masterLoginEmployees
+    : (cachedLoginEmployees.length ? cachedLoginEmployees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員") }))
+      : DEFAULT_EMPLOYEES.map((name, index) => ({ id: `default-${index + 1}`, name, displayName: name, displayOrder: index + 1, active: true, aliases: [], role: (["降旗", "藤川", "金井"].includes(name) ? "薬剤師" : "事務員") as EmployeeMasterItem["role"] })));
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];

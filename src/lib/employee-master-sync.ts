@@ -43,7 +43,7 @@ export function mergeEmployeesWithMaster(source: Employee[], master: EmployeeMas
       displayOrder: item.displayOrder,
       active: item.active,
       aliases: item.aliases || [],
-      role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員"),
+      role: item.role || matches.find(employee => employee.role)?.role,
       shifts: matches.flatMap(employee => employee.shifts)
     };
   });

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEffect } from "react";
-import { fetchShiftLoginEmployees, loginEditor, loginEmployee, ShiftLoginEmployee, ShiftSession } from "../lib/auth-sync";
+import { fetchShiftLoginEmployees, loginShift, ShiftLoginEmployee, ShiftSession } from "../lib/auth-sync";
 import { EmployeeMasterItem } from "../lib/employee-master-sync";
 
 export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterItem[]; onLogin: (session: ShiftSession) => void }) {
@@ -23,9 +23,7 @@ export function ShiftLogin({ employees, onLogin }: { employees: EmployeeMasterIt
     if (!operator) return toast.error("操作員を選択してください");
     setLoading(true);
     try {
-      let session: ShiftSession;
-      try { session = await loginEmployee(loginId.trim(), password, operator.id, operator.displayName || operator.name); }
-      catch { session = await loginEditor(loginId.trim(), password, operator.id, operator.displayName || operator.name); }
+      const session = await loginShift(loginId.trim(), password, operator.id, operator.displayName || operator.name);
       setPassword("");
       onLogin(session);
     } catch (error) { toast.error(error instanceof Error ? error.message : "ログインできませんでした"); }

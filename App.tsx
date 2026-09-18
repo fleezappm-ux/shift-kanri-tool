@@ -81,7 +81,7 @@ import { MyPage } from "./components/MyPage";
 import { AutoDraftSettings as AutoDraftSettingsView } from "./components/AutoDraftSettings";
 import { fetchAutoDraftSettings, saveAutoDraftSettings } from "./lib/auto-draft-sync";
 
-const DEFAULT_EMPLOYEES = ["従業員A", "従業員B", "従業員C", "従業員D", "従業員E"];
+const DEFAULT_EMPLOYEES: string[] = [];
 const BASE_GLOBAL_REMARK_TYPES = ["コメント"] as const;
 
 interface BeforeInstallPromptEvent extends Event {
@@ -128,7 +128,7 @@ export default function App() {
         data.forEach((item: any) => {
           if (item && item.id) uniqueMap.set(item.id, item);
         });
-        const initialData = Array.from(uniqueMap.values()) as Employee[];
+        const initialData = (Array.from(uniqueMap.values()) as Employee[]).filter(item => !/^従業員[A-EＡ-Ｅ]$/.test(String(item.name || "").trim()));
         if (initialData.length > 0) return initialData;
       } catch (e) {
         console.error("Failed to parse saved data", e);
@@ -674,7 +674,7 @@ export default function App() {
   const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
   const dashboardEmployees = sortEmployeesForDisplay(employees);
   const operatorEmployee = dashboardEmployees.find(item => item.id === appSession?.employeeId || (item.displayName || item.name) === appSession?.employeeName);
-  const loginEmployees: EmployeeMasterItem[] = employeeMaster.length ? employeeMaster : employees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role || (["降旗", "藤川", "金井"].includes(item.name) ? "薬剤師" : "事務員") }));
+  const loginEmployees: EmployeeMasterItem[] = employeeMaster.length ? employeeMaster : employees.map((item, index) => ({ id: item.id, name: item.name, displayName: item.displayName || item.name, displayOrder: index + 1, active: item.active !== false, aliases: item.aliases || [], role: item.role }));
   const displayDates = [...dateRange, ...homeWeekDates.filter(homeDate => !dateRange.some(date => getDateStr(date) === getDateStr(homeDate)))];
   const displayRemarks = buildDisplayRemarks(globalRemarks, specialDayRules, displayDates);
   const globalRemarkTypes = [...new Set(["なし", ...specialDayRules.filter(rule => rule.enabled).sort((a, b) => (a.order ?? 999) - (b.order ?? 999)).map(rule => rule.name).filter(Boolean), ...BASE_GLOBAL_REMARK_TYPES])];

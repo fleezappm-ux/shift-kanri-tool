@@ -109,6 +109,7 @@ export async function fetchShiftsFromServer(existingEmployees: Employee[]): Prom
     const byName = new Map<string, Employee>();
     const byId = new Map<string, Employee>();
     existingEmployees.forEach(emp => {
+      if (/^従業員[A-EＡ-Ｅ]$/.test(String(emp.name || "").trim())) return;
       const hasLocalShift = emp.shifts.some(s => s.shift || s.customShiftText || s.comment);
       if (serverNames.size > 0 && !serverNames.has(emp.name) && !hasLocalShift) {
         return; // 未使用の仮従業員はスキップ

@@ -33,7 +33,7 @@ export async function saveEmployeeMaster(employees: EmployeeMasterItem[]): Promi
 }
 
 export function mergeEmployeesWithMaster(source: Employee[], master: EmployeeMasterItem[]): Employee[] {
-  return master.filter(item => item.active).sort((a, b) => a.displayOrder - b.displayOrder).map(item => {
+  return master.filter(item => item.active && !/^従業員[A-EＡ-Ｅ]$/.test(String(item.name || "").trim())).sort((a, b) => a.displayOrder - b.displayOrder).map(item => {
     const names = new Set([item.name, ...(item.aliases || [])]);
     const matches = source.filter(employee => employee.id === item.id || names.has(employee.name));
     return {

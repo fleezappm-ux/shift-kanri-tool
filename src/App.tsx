@@ -132,7 +132,7 @@ export default function App() {
         data.forEach((item: any) => {
           if (item && item.id) uniqueMap.set(item.id, item);
         });
-        const initialData = Array.from(uniqueMap.values()) as Employee[];
+        const initialData = (Array.from(uniqueMap.values()) as Employee[]).filter(item => !/^従業員[A-EＡ-Ｅ]$/.test(String(item.name || "").trim()));
         if (initialData.length > 0) return initialData;
       } catch (e) {
         console.error("Failed to parse saved data", e);

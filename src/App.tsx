@@ -1940,7 +1940,7 @@ export default function App() {
                 installLabel={installLabel}
                 operatorName={appSession.employeeName || "未選択"}
                 requests={homeBoardRequests}
-                boardMonthLabel={format(homeBoardMonth, "yyyy年M月")}
+                boardMonthLabel={(() => { const r = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay); return r.length ? `${format(r[0], "M/d")}〜${format(r[r.length - 1], "M/d")}` : "期間未設定"; })()}
                 boardLocked={false}
                 isEditor={appSession.role === "admin"}
                 onOpenBoard={() => { setCurrentMonth(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}

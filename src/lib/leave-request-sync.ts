@@ -52,7 +52,12 @@ export async function cancelLeaveRequest(id: string): Promise<LeaveRequest> {
   return json.request as LeaveRequest;
 }
 
-export async function updateLeaveRequestStatus(id: string, status: LeaveRequestStatus): Promise<LeaveRequest> {
-  const json = await request("updateShiftLeaveRequestStatus", { shiftApiKey: getManagementApiKey(), id, status });
+export async function updateLeaveRequestStatus(id: string, status: LeaveRequestStatus, rejectionReason = ""): Promise<LeaveRequest> {
+  const json = await request("updateShiftLeaveRequestStatus", { shiftApiKey: getManagementApiKey(), id, status, rejectionReason });
+  return json.request as LeaveRequest;
+}
+
+export async function updateLeaveRequestWorkTime(id: string, desiredWorkStart: string, desiredWorkEnd: string): Promise<LeaveRequest> {
+  const json = await request("updateShiftLeaveRequestWorkTime", { employeeToken: getEmployeeToken(), id, desiredWorkStart, desiredWorkEnd });
   return json.request as LeaveRequest;
 }

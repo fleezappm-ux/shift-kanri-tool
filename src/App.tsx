@@ -2318,6 +2318,7 @@ export default function App() {
                     <Card className="employee-shift-card border-border shadow-none">
                       <CardHeader className={`employee-card-header employee-blue-header page-blue-header border-b border-border ${isLocked ? "is-final" : "is-draft"}`}>
                         <div className="employee-blue-top">
+                          <Button variant="ghost" size="sm" className="employee-back-button" onClick={() => { setActiveTab("dashboard"); setIsFromAdmin(false); }}><ArrowLeft className="w-4 h-4" />戻る</Button>
                           <div>
                           <div className="flex items-center gap-2 group">
                             <CardTitle className="text-base">{emp.displayName || emp.name} の個人シート</CardTitle>
@@ -2325,13 +2326,7 @@ export default function App() {
                           </div>
                           <Badge className={isLocked ? "bg-emerald-500 text-white border-0" : "bg-amber-300 text-amber-950 border-0"}>{isLocked ? "確定" : "シフト案"}</Badge>
                         </div>
-                        <div className="employee-blue-controls">
-                          <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
-                          <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
-                          <div className="employee-month-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><strong>{format(dateRange[0], "M月d日")}〜{format(dateRange[dateRange.length - 1], "M月d日")}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div>
-                          <label><span>名前</span><select value={emp.id} onChange={event => setActiveTab(event.target.value)}>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
-                        </div>
-                      </CardHeader>
+                        <div className="employee-blue-controls"><div className="employee-month-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><strong>{format(dateRange[0], "M月d日")}〜{format(dateRange[dateRange.length - 1], "M月d日")}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div></div></CardHeader>
                       <CardContent className="p-0">
                         {isFromAdmin && (
                           <div className="mobile-employee-picker">

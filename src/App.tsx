@@ -69,6 +69,7 @@ import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
+import { BoardVisibility, fetchBoardVisibility, saveBoardVisibility } from "./lib/store-board-sync";
 import { getManagementApiKey, logoutShiftSession, saveManagementApiKey, ShiftSession } from "./lib/auth-sync";
 import { DropdownMasterSettings } from "./components/DropdownMasterSettings";
 import { DEFAULT_STORE_MASTER, StoreMaster, StoreMasterSettings } from "./components/StoreMasterSettings";
@@ -279,6 +280,22 @@ export default function App() {
         setCurrentMonth(getCurrentShiftMonth(new Date(), settings));
       })
       .catch(error => console.error("カレンダー期間設定の取得に失敗しました", error));
+    return () => { cancelled = true; };
+  }, [appSession?.token]);
+
+  useEffect(() => {
+    if (!appSession?.token) return;
+    let cancelled = false;
+    fetchBoardVisibility()
+      .then(visibility => {
+        if (cancelled) return;
+        setStoreMaster(current => {
+          const next = { ...current, leaveRequestBoardVisibility: visibility };
+          localStorage.setItem("store_master_settings", JSON.stringify(next));
+          return next;
+        });
+      })
+      .catch(error => console.error("休み希望の掲示板公開設定の取得に失敗しました", error));
     return () => { cancelled = true; };
   }, [appSession?.token]);
 
@@ -888,6 +905,20 @@ export default function App() {
       toast.error(error instanceof Error ? error.message : "カレンダー期間を保存できませんでした");
     } finally {
       setCalendarPeriodSaving(false);
+    }
+  };
+
+  const handleSaveBoardVisibility = async (visibility: BoardVisibility) => {
+    try {
+      const saved = await saveBoardVisibility(visibility);
+      setStoreMaster(current => {
+        const next = { ...current, leaveRequestBoardVisibility: saved };
+        localStorage.setItem("store_master_settings", JSON.stringify(next));
+        return next;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "休み希望の掲示板公開設定を保存できませんでした");
+      throw error;
     }
   };
 
@@ -2166,7 +2197,7 @@ export default function App() {
               </motion.div>
             ) : activeTab === "admin" && settingsPage === "store" ? (
               <motion.div key="settings-store" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} /></CardContent></Card>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} onSaveBoardVisibility={handleSaveBoardVisibility} /></CardContent></Card>
               </motion.div>
             ) : activeTab === "admin" && settingsPage === "autodraft" ? (
               <motion.div key="settings-autodraft" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><AutoDraftSettingsView settings={autoDraftSettings} onChange={value => void updateAutoDraftSettings(value)} onStart={startAutoDraft} /></motion.div>

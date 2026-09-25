@@ -714,16 +714,16 @@ export default function App() {
     } finally { setLeaveRequestLoading(false); }
   };
 
-  const handleLeaveRequestStatus = async (request: LeaveRequest, status: LeaveRequestStatus) => {
+  const handleLeaveRequestStatus = async (request: LeaveRequest, status: LeaveRequestStatus, rejectionReason = "") => {
     setLeaveRequestLoading(true);
     try {
-      const saved = await updateLeaveRequestStatus(request.id, status);
+      const saved = await updateLeaveRequestStatus(request.id, status, rejectionReason);
       setLeaveRequests(prev => prev.map(item => item.id === saved.id ? saved : item));
       if (status === "承認" && request.date) {
         const shift: ShiftType | null = request.type === "有給希望" ? "有休" : request.type === "休み希望" ? "休み" : null;
         if (shift) handleShiftChange(employees.find(item => item.name === request.employeeName)?.id || "", request.date, shift);
       }
-      toast.success(status === "承認" ? "承認しました。勤務表を確認してNotionへ保存してください" : "却下しました");
+      toast.success(status === "承認" ? "承認しました" : "却下しました");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "状態を更新できませんでした");
     } finally { setLeaveRequestLoading(false); }

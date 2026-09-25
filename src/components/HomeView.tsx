@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Smartphone, UserRound, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { Employee, GlobalRemark, LeaveRequest } from "../types";
 import { WorkforceHeatmap } from "./WorkforceHeatmap";
@@ -70,7 +70,7 @@ export function HomeView({
     <motion.div key="home" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4 pb-4">
       <header className="home-brand-header">
         <div className="home-brand-cluster">
-          <img src="/shift-kanri-tool/icon-192.png" alt="" />
+          <button type="button" className="home-app-icon" onClick={onInstall} title={installLabel} aria-label={installLabel}><img src="/shift-kanri-tool/icon-192.png" alt="薬局シフトをホーム画面に追加" /></button>
           <div className="home-brand-copy">
             <span>PHARMACY SHIFT</span>
             <div className="home-title-line">
@@ -87,7 +87,6 @@ export function HomeView({
           </div>
           <Button variant="outline" size="sm" className="home-week-button" onClick={() => onWeekOffsetChange(weekOffset + 1)}>次週 <ChevronRight className="w-4 h-4" /></Button>
         </div>
-        <button className="home-install-button" onClick={onInstall}><Smartphone className="w-4 h-4" /><span>{installLabel}</span></button>
       </header>
 
       <div className="home-week-grid">

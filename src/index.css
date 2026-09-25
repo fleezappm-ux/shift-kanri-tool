@@ -263,3 +263,16 @@ body { margin:0; background:#f5f7fa; }
 @media(max-width:900px){.leave-request-operator strong{font-size:17px}.period-navigation{grid-template-columns:auto 1fr auto}.period-navigation .period-back{grid-column:1/-1;justify-self:start}.period-navigation strong{font-size:13px}}
 
 .dashboard-blue-controls{grid-template-columns:minmax(0,1fr)!important}.dashboard-period-step{width:100%}.employee-blue-controls{display:block!important}.employee-month-step{max-width:680px;margin:0 auto}.employee-blue-top{grid-template-columns:auto 1fr auto!important}.employee-back-button{color:#fff!important;border:1px solid rgba(255,255,255,.4)!important;background:rgba(255,255,255,.12)!important}.employee-shift-card{border:0!important;box-shadow:none!important}.shift-main:has(.employee-shift-card){padding-top:14px!important}
+
+/* Admin shift clarity */
+.admin-shift-title { color:#dc2626 !important; }
+.dashboard-blue-top { position:relative; }
+.dashboard-lock-button { margin-left:auto; }
+@media (max-width: 767px) {
+  .dashboard-lock-button { position:absolute; right:14px; top:14px; z-index:3; }
+  .dashboard-blue-header { position:relative; padding-top:18px; }
+  .dashboard-blue-brand { padding-right:110px; }
+}
+.leave-status.status-承認, .status-承認 .leave-status { background:#dcfce7; color:#15803d; }
+.leave-status.status-申請中, .status-申請中 .leave-status { background:#fef3c7; color:#a16207; }
+.leave-status.status-却下, .status-却下 .leave-status { background:#fee2e2; color:#b91c1c; }

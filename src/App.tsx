@@ -109,7 +109,7 @@ export default function App() {
     logoutShiftSession();
     return null;
   });
-  const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "dropdown" | "special" | "operations" | "autodraft">("menu");
+  const [settingsPage, setSettingsPage] = useState<"menu" | "store" | "board" | "employee" | "shift" | "dropdown" | "special" | "operations" | "autodraft">("menu");
   const [storeMaster, setStoreMaster] = useState<StoreMaster>(() => {
     const saved = localStorage.getItem("store_master_settings");
     if (!saved) return DEFAULT_STORE_MASTER;
@@ -365,7 +365,7 @@ export default function App() {
     if (!appSession?.token || activeTab !== "board") return;
     let cancelled = false;
     const loadBoardPeriods = async () => {
-      const anchors = [currentMonth, addMonths(currentMonth, 1), addMonths(currentMonth, 2)];
+      const anchors = [currentMonth];
       const loaded = await Promise.all(anchors.map(async anchor => {
         const range = generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
         const start = getDateStr(range[0]);
@@ -1934,7 +1934,7 @@ export default function App() {
           <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${activeTab === "mypage" ? "text-blue-600" : "text-slate-500"}`} onClick={() => { setActiveTab("mypage"); setIsFromAdmin(false); }}><UserRound className="w-5 h-5" />マイページ</button>
         </> : <>
           <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${isFromAdmin && activeTab !== "admin" ? "text-blue-600" : "text-slate-500"}`} onClick={() => requestEditAccess(() => { setActiveTab("dashboard"); setIsFromAdmin(true); })}><PencilLine className="w-5 h-5" />シフト作成</button>
-          <button className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold text-slate-500 relative" onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })} disabled={syncState === "loading" || syncState === "saving"}><span className={`sync-dot ${syncState} absolute top-1 right-1/4`} /><CloudUpload className="w-5 h-5" />{syncState === "saving" ? `${saveElapsedSeconds}秒` : syncState === "saved" ? "保存済" : "保存"}</button>
+          <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${activeTab === "board" ? "text-amber-600" : "text-slate-500"}`} onClick={() => { setActiveTab("board"); setIsFromAdmin(true); }}><MessageSquareText className="w-5 h-5" />掲示板</button>
           <button className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-semibold ${(activeTab === "admin" && isFromAdmin) ? "text-blue-600" : "text-slate-500"}`} onClick={() => { requestEditAccess(() => { setActiveTab("admin"); setIsFromAdmin(true); setSettingsPage("menu"); }); }}><FileCode className="w-5 h-5" />設定</button>
         </>}
       </nav>
@@ -1996,7 +1996,7 @@ export default function App() {
                     <div className="dashboard-blue-top">
                       <div className="dashboard-blue-brand">
                         <img src="/shift-kanri-tool/icon-192.png" alt="" />
-                        <div><small>PHARMACY SHIFT</small><CardTitle>薬局シフト</CardTitle><span><UserRound className="h-3.5 w-3.5" />操作員：{appSession.employeeName || "未選択"}</span></div>
+                        <div><small>PHARMACY SHIFT</small><CardTitle className={isFromAdmin ? "admin-shift-title" : ""}>{isFromAdmin ? "管理者シフト" : "薬局シフト"}</CardTitle><span><UserRound className="h-3.5 w-3.5" />操作員：{appSession.employeeName || "未選択"}</span></div>
                       </div>
                       <div className="dashboard-blue-period">
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy年M月d日")}〜${format(dateRange[dateRange.length - 1], "M月d日")}` : "期間未設定"}
@@ -2005,7 +2005,7 @@ export default function App() {
                     </div>
                     <div className="dashboard-blue-controls">
                       
-                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><div className="dashboard-period-title"><div className="dashboard-title-status"><strong>{dashboardTitle}</strong><span>{isLocked ? "確定シフト" : "シフト案・編集中"}</span></div><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button>{isFromAdmin && <Button disabled={periodStatusLoading} size="sm" className={`dashboard-lock-button ${isLocked ? "is-unlock" : ""}`} onClick={toggleLock}>{isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{periodStatusLoading ? "処理中…" : isLocked ? "確定を解除" : "シフトを確定"}</Button>}</div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div>
+                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><div className="dashboard-period-title"><div className="dashboard-title-status"><strong>{dateRange.length ? `${format(dateRange[0], "M/d")}〜${format(dateRange[dateRange.length - 1], "M/d")}` : "期間未設定"}</strong><span>{isLocked ? "公開中" : "編集中"}</span></div><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button>{isFromAdmin && <Button disabled={periodStatusLoading} size="sm" className={`dashboard-lock-button ${isLocked ? "is-unlock" : ""}`} onClick={toggleLock}>{isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{periodStatusLoading ? "処理中…" : isLocked ? "確定を解除" : "シフトを確定"}</Button>}</div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div>
                       
                     </div>
                   </CardHeader>
@@ -2183,11 +2183,13 @@ export default function App() {
                   </CardHeader>
                   <CardContent className="grid gap-4 p-6 sm:grid-cols-2">
                     {[
-                      { key: "store", icon: Building2, title: "店舗マスター", description: "店舗名、集計期間、営業曜日、祝日・年末年始・お盆" },
+                      { key: "store", icon: Building2, title: "店舗マスター", description: "店舗名、集計期間、営業曜日、APIキー" },
+                      { key: "board", icon: MessageSquareText, title: "お知らせ掲示板マスタ", description: "休み希望を掲示板へ公開するタイミング" },
+                      { key: "employee", icon: Users, title: "従業員設定", description: "従業員マスター、役職、表示順" },
+                      { key: "shift", icon: SlidersHorizontal, title: "シフト設定", description: "自動作成、クール、特殊日、プルダウン" },
                       { key: "dropdown", icon: ListChecks, title: "プルダウンマスター", description: "備考項目の名前、帯色、動作、有効・無効、並び順" },
                       { key: "special", icon: CalendarDays, title: "特殊日設定", description: "当番薬局、当番医、臨時休業など年ごとに変わる日付" },
                       { key: "autodraft", icon: CalendarClock, title: "シフト案自動作成", description: "3か月先までの案をクールと休業日ルールから作成" },
-                      { key: "operations", icon: SlidersHorizontal, title: "従業員・シフト設定", description: "従業員、勤務パターン、接続キー、出力設定" }
                     ].map(item => <button key={item.key} type="button" onClick={() => setSettingsPage(item.key as typeof settingsPage)} className="group flex min-h-32 items-center gap-4 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/50">
                       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><item.icon className="h-6 w-6" /></span>
                       <span><strong className="flex items-center gap-2 text-base text-slate-900">{item.title}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" /></strong><small className="mt-1 block leading-relaxed text-slate-500">{item.description}</small></span>
@@ -2197,8 +2199,17 @@ export default function App() {
               </motion.div>
             ) : activeTab === "admin" && settingsPage === "store" ? (
               <motion.div key="settings-store" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} onSaveBoardVisibility={handleSaveBoardVisibility} /></CardContent></Card>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>店舗マスター</CardTitle><CardDescription>店舗全体の基本ルール</CardDescription></div></div></CardHeader><CardContent className="p-6 space-y-5"><StoreMasterSettings master={storeMaster} onMasterChange={setStoreMaster} period={calendarPeriodSettings} periodDraft={calendarPeriodDraft} saving={calendarPeriodSaving} onPeriodDraftChange={setCalendarPeriodDraft} onSavePeriod={handleSaveCalendarPeriod} onSaveBoardVisibility={handleSaveBoardVisibility} /><section className="rounded-2xl border-2 border-blue-100 bg-blue-50/50 p-5"><h4 className="font-black">APIキー設定</h4><p className="mt-1 text-xs text-slate-500">管理者操作とNotion連携に使用します。この端末だけに保存されます。</p><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"><Input type="password" value={managementApiKey} onChange={e => setManagementApiKey(e.target.value)} placeholder="管理者用GAS接続キー" /><Button onClick={() => { saveManagementApiKey(managementApiKey); toast.success("APIキーをこの端末に保存しました"); }}>APIキーを保存</Button></div></section></CardContent></Card>
               </motion.div>
+            ) : activeTab === "admin" && settingsPage === "board" ? (
+              <motion.div key="settings-board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>お知らせ掲示板マスタ</CardTitle><CardDescription>承認済みの希望を従業員へ共有する設定</CardDescription></div></div></CardHeader>
+                <CardContent className="p-6 space-y-4"><label className="block text-sm font-bold">休み希望の公開設定<select className="mt-2 h-11 w-full rounded-xl border bg-white px-3" value={storeMaster.leaveRequestBoardVisibility || "immediate"} onChange={e => setStoreMaster(v => ({...v, leaveRequestBoardVisibility:e.target.value as StoreMaster["leaveRequestBoardVisibility"]}))}><option value="immediate">提出と同時に全員へ公開</option><option value="after_approval">管理者確認後に全員へ公開</option><option value="private">本人と編集者だけに表示</option></select></label><Button className="w-full h-11 font-bold" onClick={() => void handleSaveBoardVisibility(storeMaster.leaveRequestBoardVisibility)}>お知らせ掲示板マスタを保存</Button></CardContent></Card>
+              </motion.div>
+            ) : activeTab === "admin" && settingsPage === "employee" ? (
+              <motion.div key="settings-employee" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><EmployeeMasterSettings employees={employeeMaster} onSave={handleSaveEmployeeMaster} /></motion.div>
+            ) : activeTab === "admin" && settingsPage === "shift" ? (
+              <motion.div key="settings-shift" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}><Card><CardHeader className="page-blue-header rounded-t-xl"><CardTitle>シフト設定</CardTitle><CardDescription>各マスターを選択してください</CardDescription></CardHeader><CardContent className="grid gap-3 p-6"><Button variant="outline" onClick={() => setSettingsPage("autodraft")}>シフト案自動作成マスター</Button><Button variant="outline" onClick={() => setSettingsPage("operations")}>クール作成マスター</Button><Button variant="outline" onClick={() => setSettingsPage("special")}>特殊日マスター</Button><Button variant="outline" onClick={() => setSettingsPage("dropdown")}>プルダウンマスター</Button><Button variant="ghost" onClick={() => setSettingsPage("menu")}>設定へ戻る</Button></CardContent></Card></motion.div>
             ) : activeTab === "admin" && settingsPage === "autodraft" ? (
               <motion.div key="settings-autodraft" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><AutoDraftSettingsView settings={autoDraftSettings} onChange={value => void updateAutoDraftSettings(value)} onStart={startAutoDraft} /></motion.div>
             ) : activeTab === "admin" && settingsPage === "dropdown" ? (

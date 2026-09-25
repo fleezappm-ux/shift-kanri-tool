@@ -621,6 +621,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appSession?.token, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
+  useEffect(() => {
+    if (activeTab !== "requests" || !appSession?.token) return;
+    let cancelled = false;
+    const moveToFirstOpenRequestPeriod = async () => {
+      let candidate = currentMonth;
+      for (let offset = 0; offset < 12; offset += 1) {
+        const range = generateConfiguredDateRange(candidate.getFullYear(), candidate.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+        if (!range.length) return;
+        try {
+          const locked = await fetchShiftPeriodStatus(getDateStr(range[0]));
+          if (!locked) {
+            if (!cancelled && format(candidate, "yyyy-MM") !== currentMonthKey) setCurrentMonth(candidate);
+            return;
+          }
+        } catch (error) {
+          console.error("希望提出期間の確認に失敗しました", error);
+          return;
+        }
+        candidate = addMonths(candidate, 1);
+      }
+    };
+    void moveToFirstOpenRequestPeriod();
+    return () => { cancelled = true; };
+    // 希望提出画面を開いた時だけ、確定済み期間を飛ばして最初の未確定期間へ進めます。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, appSession?.token]);
+
   const handleLeaveRequestSubmit = async (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => {
     if (!dateRange.length) return;
     setLeaveRequestLoading(true);
@@ -2081,7 +2108,7 @@ export default function App() {
                 onOpenBoard={() => { setCurrentMonth(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}
               />
             ) : activeTab === "requests" ? (
-              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} monthOptions={Array.from({ length: 4 }, (_, offset) => { const month = addMonths(getCurrentShiftMonth(new Date(), calendarPeriodSettings), offset); const key = format(month, "yyyy-MM"); return { key, label: format(month, "M月"), locked: lockedMonths.includes(key) }; })} currentMonthKey={currentMonthKey} onMonthSelect={key => { const [year, month] = key.split("-").map(Number); setCurrentMonth(new Date(year, month - 1, 1)); }} />
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
             ) : activeTab === "board" ? (
               <BulletinBoard requests={leaveRequests} monthLabel={format(currentMonth, "yyyy年M月")} isEditor={appSession.role === "admin"} locked={isLocked} onPrevious={() => setCurrentMonth(value => addMonths(value, -1))} onNext={() => setCurrentMonth(value => addMonths(value, 1))} />
             ) : activeTab === "mypage" ? (
@@ -2452,7 +2479,7 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                   >
                     <Card className="employee-shift-card border-border shadow-none">
-                      <CardHeader className="employee-card-header employee-blue-header page-blue-header border-b border-border">
+                      <CardHeader className={`employee-card-header employee-blue-header page-blue-header border-b border-border ${isLocked ? "is-final" : "is-draft"}`}>
                         <div className="employee-blue-top">
                           <div>
                           <div className="flex items-center gap-2 group">

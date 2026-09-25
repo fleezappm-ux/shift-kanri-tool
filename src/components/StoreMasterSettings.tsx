@@ -40,6 +40,7 @@ interface Props {
   saving: boolean;
   onPeriodDraftChange: (settings: CalendarPeriodSettings) => void;
   onSavePeriod: () => Promise<void>;
+  onSaveBoardVisibility: (visibility: StoreMaster["leaveRequestBoardVisibility"]) => Promise<void>;
 }
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -47,13 +48,14 @@ const heading = "text-sm font-bold text-slate-900";
 const description = "mt-1 text-xs leading-5 text-slate-500";
 const field = "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-export function StoreMasterSettings({ master, onMasterChange, period, periodDraft, saving, onPeriodDraftChange, onSavePeriod }: Props) {
+export function StoreMasterSettings({ master, onMasterChange, period, periodDraft, saving, onPeriodDraftChange, onSavePeriod, onSaveBoardVisibility }: Props) {
   const [draft, setDraft] = useState(master);
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const save = async () => {
     onMasterChange(draft);
     localStorage.setItem("store_master_settings", JSON.stringify(draft));
     if (period.startDay !== periodDraft.startDay || period.endDay !== periodDraft.endDay) await onSavePeriod();
+    if (draft.leaveRequestBoardVisibility !== master.leaveRequestBoardVisibility) await onSaveBoardVisibility(draft.leaveRequestBoardVisibility);
     toast.success("店舗マスターを保存しました");
   };
 

@@ -71,6 +71,9 @@ export interface LeaveRequest {
   type: LeaveRequestType;
   comment: string;
   commentVisibility?: CommentVisibility;
+  desiredWorkStart?: string;
+  desiredWorkEnd?: string;
+  rejectionReason?: string;
   status: LeaveRequestStatus;
   submittedAt: string;
   updatedAt: string;

@@ -43,6 +43,8 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
 
   const submitNote = async () => {
     if (!employeeName || draftEntries.length === 0 || submitting) return;
+    const summary = draftEntries.map(([date, type]) => `${format(new Date(`${date}T00:00:00`), "M/d（E）", { locale: ja })}　${type}`).join("\n");
+    if (!window.confirm(`以下の希望を提出します。よろしいですか？\n\n${summary}`)) return;
     setSubmitting(true);
     try {
       for (const [date, type] of draftEntries) {
@@ -60,7 +62,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
       <header className="leave-request-hero leave-request-hero-v2">
         <h1>休み希望提出</h1>
         <strong className="leave-request-period">{periodLabel}</strong>
-        <span className="leave-request-operator">操作員：{employeeName || "未選択"}</span>
+        <span className="leave-request-operator"><small>操作員</small><strong>{employeeName || "未選択"}</strong></span>
       </header>
 
       <section className="leave-request-card">
@@ -73,9 +75,9 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
               const remark = remarks.find(item => item.date === key);
               const color = remark?.color || (date.getDay() === 0 || remark?.type === "祝日" || remark?.type === "店休日" ? "red" : "");
               const selected = drafts[key] || "";
-              return <div key={key} className={`leave-day-card ${existing ? "has-request" : ""} ${locked ? "is-locked" : ""} ${color ? `special-${color}` : ""}`}>
+              return <div key={key} className={`leave-day-card ${existing ? "has-request" : ""} ${selected ? "has-draft" : ""} ${locked ? "is-locked" : ""} ${color ? `special-${color}` : ""}`}>
                 <div className="leave-day-date"><strong>{format(date, "M/d")}</strong><small>{format(date, "E", { locale: ja })}</small></div>
-                {remark && remark.type !== "なし" && <em>{remark.type}</em>}
+                {remark && remark.type !== "なし" && !(date.getDay() === 0 && remark.type === "祝日") && <em>{remark.type}</em>}
                 <select disabled={locked} value={selected} onChange={event => updateDraft(key, event.target.value)} aria-label={`${format(date, "M/d")}の希望`}>
                   <option value="">希望なし</option>
                   {TYPES.map(value => <option key={value} value={value}>{value.replace("希望", "")}</option>)}
@@ -103,7 +105,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           {mine.map(item => <div key={item.id}>
             <div><strong>{item.type}</strong><span>{item.date ? format(new Date(`${item.date}T00:00:00`), "M月d日（E）", { locale: ja }) : "この期間"}</span>{item.comment && <small>{item.comment}</small>}</div>
             <span className={`leave-status status-${item.status}`}>{item.status}</span>
-            {!locked && item.status === "申請中" && <button aria-label="希望を取り消す" onClick={() => onCancel(item.id)}><Trash2 className="w-4 h-4" /></button>}
+            {!locked && item.status === "申請中" && <button aria-label="希望を取り消す" onClick={() => { if (window.confirm(`${item.date || "この期間"}の${item.type}を取り下げますか？`)) void onCancel(item.id); }}><Trash2 className="w-4 h-4" /></button>}
           </div>)}
         </div>}
       </section>}

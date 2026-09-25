@@ -76,7 +76,7 @@ import { ShiftLogin } from "./components/ShiftLogin";
 import { EmployeeMasterSettings } from "./components/EmployeeMasterSettings";
 import { EmployeeMasterItem, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster } from "./lib/employee-master-sync";
 import { fetchCycleMaster, saveCycleMaster } from "./lib/cycle-master-sync";
-import { BulletinBoard } from "./components/BulletinBoard";
+import { BoardPeriod, BulletinBoard } from "./components/BulletinBoard";
 import { MyPage } from "./components/MyPage";
 import { AutoDraftSettings as AutoDraftSettingsView } from "./components/AutoDraftSettings";
 import { fetchAutoDraftSettings, saveAutoDraftSettings } from "./lib/auto-draft-sync";
@@ -233,6 +233,7 @@ export default function App() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [leaveRequestLoading, setLeaveRequestLoading] = useState(false);
   const [homeBoardRequests, setHomeBoardRequests] = useState<LeaveRequest[]>([]);
+  const [boardPeriods, setBoardPeriods] = useState<BoardPeriod[]>([]);
   const [specialDayRules, setSpecialDayRules] = useState<SpecialDayRule[]>(DEFAULT_SPECIAL_DAY_RULES);
   const [specialDayLoading, setSpecialDayLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -343,6 +344,24 @@ export default function App() {
     fetchLeaveRequests(getDateStr(range[0]), getDateStr(range[range.length - 1])).then(setHomeBoardRequests).catch(() => setHomeBoardRequests([]));
   }, [appSession?.token, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
+  useEffect(() => {
+    if (!appSession?.token || activeTab !== "board") return;
+    let cancelled = false;
+    const loadBoardPeriods = async () => {
+      const anchors = [currentMonth, addMonths(currentMonth, 1), addMonths(currentMonth, 2)];
+      const loaded = await Promise.all(anchors.map(async anchor => {
+        const range = generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+        const start = getDateStr(range[0]);
+        const end = getDateStr(range[range.length - 1]);
+        const [requests, locked] = await Promise.all([fetchLeaveRequests(start, end), fetchShiftPeriodStatus(start)]);
+        return { label: `${format(range[0], "M/d")}〜${format(range[range.length - 1], "M/d")}`, locked, requests };
+      }));
+      if (!cancelled) setBoardPeriods(loaded);
+    };
+    void loadBoardPeriods().catch(error => { console.error("掲示板の取得に失敗しました", error); if (!cancelled) setBoardPeriods([]); });
+    return () => { cancelled = true; };
+  }, [appSession?.token, activeTab, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+
   const changeHomeWeek = (offset: number) => {
     const today = new Date();
     const diffToMonday = today.getDay() === 0 ? -6 : 1 - today.getDay();
@@ -356,7 +375,7 @@ export default function App() {
 
   const goToCurrentShiftPeriod = () => {
     setCurrentMonth(getCurrentShiftMonth(new Date(), calendarPeriodSettings));
-    toast.success("今日を含む当月シフトへ戻りました");
+    toast.success("今日を含むシフト期間へ戻りました");
   };
 
   const installLabel = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? "ホーム画面に追加" : "デスクトップに追加";
@@ -1892,192 +1911,11 @@ export default function App() {
       {/* Main Content */}
       <main className={`shift-main flex-1 flex flex-col overflow-hidden p-6 pb-24 md:pb-6 gap-6 ${activeTab === "dashboard" ? "dashboard-active" : ""}`}>
         {(activeTab === "board" || activeTab === "mypage") && (
-        <header className="shift-page-header flex flex-col md:flex-row items-center justify-between shrink-0 gap-4 mb-2">
-          {activeTab !== "dashboard" && <>
-          <div className="month-navigation flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="page-back-button h-9 px-3 rounded-lg bg-white hover:bg-blue-50 hover:text-blue-700 shadow-xs transition-all"
-              onClick={goBack}
-              title="前のページへ戻る"
-            >
-              <ArrowLeft className="w-4 h-4" /><span>戻る</span>
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-9 px-3 rounded-lg hover:bg-white hover:shadow-sm transition-all"
-              onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}
-            >
-              <ChevronLeft className="w-4 h-4" /><span className="mobile-month-label">前月</span>
-            </Button>
-            
-            <div className="flex items-center gap-3 px-4 py-1.5 bg-white rounded-lg shadow-xs border border-border/40">
-              <Select 
-                value={currentMonth.getFullYear().toString()} 
-                onValueChange={(val) => {
-                  const newDate = new Date(currentMonth);
-                  newDate.setFullYear(parseInt(val));
-                  setCurrentMonth(newDate);
-                }}
-              >
-                <SelectTrigger className="h-6 w-auto border-none shadow-none bg-transparent font-bold text-sm focus:ring-0 p-0 hover:text-primary transition-colors">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-border shadow-2xl">
-                  {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
-                    <SelectItem key={year} value={year.toString()} className="text-xs font-medium">{year}年</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <div className="w-px h-3 bg-border/60" />
-
-              <Select 
-                value={(currentMonth.getMonth() + 1).toString()} 
-                onValueChange={(val) => {
-                  const newDate = new Date(currentMonth);
-                  newDate.setMonth(parseInt(val) - 1);
-                  setCurrentMonth(newDate);
-                }}
-              >
-                <SelectTrigger className="h-6 w-auto border-none shadow-none bg-transparent font-bold text-sm focus:ring-0 p-0 hover:text-primary transition-colors">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-border shadow-2xl">
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-                    <SelectItem key={month} value={month.toString()} className="text-xs font-medium">{month}月</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="h-9 px-3 rounded-lg hover:bg-white hover:shadow-sm transition-all"
-              onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}
-            >
-              <span className="mobile-month-label">次月</span><ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <TabsList className={`shift-person-tabs bg-muted p-1 rounded-xl border border-border/50 h-auto flex flex-wrap justify-center overflow-visible ${activeTab === "requests" ? "hidden" : ""}`}>
-            <TabsTrigger 
-              value="dashboard" 
-              className="px-5 py-2 text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all" 
-            >
-              全体
-            </TabsTrigger>
-            {employees.map(emp => (
-              <TabsTrigger 
-                key={emp.id} 
-                value={emp.id} 
-                className="px-5 py-2 text-xs font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all"
-              >
-                {emp.displayName || emp.name}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <div className={`shift-tab-arrows flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50 ml-auto md:ml-0 ${activeTab === "requests" ? "hidden" : ""}`}>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 rounded-lg hover:bg-white hover:shadow-sm transition-all"
-              title="前のタブへ"
-              onClick={() => {
-                const allTabs = ["dashboard", ...employees.map(e => e.id), "admin"];
-                const currentIdx = allTabs.indexOf(activeTab);
-                const nextIdx = (currentIdx - 1 + allTabs.length) % allTabs.length;
-                const target = allTabs[nextIdx];
-                if (target === "admin") {
-                  requestEditAccess(() => {
-                    setActiveTab(target);
-                    setIsFromAdmin(true);
-                  });
-                } else {
-                  setActiveTab(target);
-                  if (target === "dashboard") setIsFromAdmin(false);
-                }
-              }}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="h-8 w-8 rounded-lg hover:bg-white hover:shadow-sm transition-all"
-              title="次のタブへ"
-              onClick={() => {
-                const allTabs = ["dashboard", ...employees.map(e => e.id), "admin"];
-                const currentIdx = allTabs.indexOf(activeTab);
-                const nextIdx = (currentIdx + 1) % allTabs.length;
-                const target = allTabs[nextIdx];
-                if (target === "admin") {
-                  requestEditAccess(() => {
-                    setActiveTab(target);
-                    setIsFromAdmin(true);
-                  });
-                } else {
-                  setActiveTab(target);
-                  if (target === "dashboard") setIsFromAdmin(false);
-                }
-              }}
-            >
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </div>
-          </>}
-
-          {isFromAdmin && activeTab !== "admin" && (
-            <div className="admin-header-actions flex items-center gap-1 bg-muted p-1 rounded-xl border border-border/50">
-              <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={goToCurrentShiftPeriod}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />当月へ戻る
-              </Button>
-              <Button disabled={periodStatusLoading} variant={isLocked ? "destructive" : "default"} size="sm" className={`h-8 text-[10px] font-bold ${isLocked ? "" : "bg-emerald-600 hover:bg-emerald-700"}`} onClick={toggleLock}>
-                {isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{isLocked ? "確定解除" : "シフト確定"}
-              </Button>
-              <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={() => void downloadExcel()}>
-                <Download className="w-3.5 h-3.5 mr-1 text-green-600" />Excel出力
-              </Button>
-              <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold bg-white" onClick={createNextMonthShifts}>
-                <PlusCircle className="w-3.5 h-3.5 mr-1 text-blue-600" />翌月シフト作成（自動）
-              </Button>
-              {showClearConfirm ? (
-                <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
-                  <span className="text-[10px] font-bold text-red-600 px-2">全消去しますか？</span>
-                  <Button 
-                    variant="destructive"
-                    size="sm" 
-                    className="h-7 text-[10px] font-bold rounded-lg px-3 bg-red-600 hover:bg-red-700 text-white border-0 shadow-sm"
-                    onClick={clearMonthShifts}
-                  >
-                    実行
-                  </Button>
-                  <Button 
-                    variant="ghost"
-                    size="sm" 
-                    className="h-7 text-[10px] font-bold rounded-lg px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 border-0"
-                    onClick={() => setShowClearConfirm(false)}
-                  >
-                    キャンセル
-                  </Button>
-                </div>
-              ) : (
-                <Button 
-                  variant="destructive"
-                  size="sm" 
-                  className={`h-8 text-[10px] font-bold rounded-lg px-3 ${isLocked ? "opacity-50 cursor-not-allowed" : ""} bg-red-600 hover:bg-red-700 text-white border-0 shadow-sm`}
-                  onClick={() => setShowClearConfirm(true)}
-                  disabled={isLocked}
-                >
-                  当月リセット
-                </Button>
-              )}
-            </div>
-          )}
+        <header className="shift-page-header period-navigation shrink-0">
+          <Button variant="ghost" size="sm" className="period-back" onClick={goBack}><ArrowLeft className="w-4 h-4" />戻る</Button>
+          <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="w-4 h-4" />前の期間</Button>
+          <strong>{dateRange.length ? `${format(dateRange[0], "M/d")}〜${format(dateRange[dateRange.length - 1], "M/d")}` : "期間未設定"}</strong>
+          <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="w-4 h-4" /></Button>
         </header>
         )}
 
@@ -2110,7 +1948,7 @@ export default function App() {
             ) : activeTab === "requests" ? (
               <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
             ) : activeTab === "board" ? (
-              <BulletinBoard requests={leaveRequests} monthLabel={format(currentMonth, "yyyy年M月")} isEditor={appSession.role === "admin"} locked={isLocked} onPrevious={() => setCurrentMonth(value => addMonths(value, -1))} onNext={() => setCurrentMonth(value => addMonths(value, 1))} />
+              <BulletinBoard periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} operatorName={appSession.employeeName} />
             ) : activeTab === "mypage" ? (
               <MyPage employee={operatorEmployee} requests={leaveRequests} locked={isLocked} initialBalance={paidLeaveBalance} onSaveBalance={async balance => { const saved = await savePaidLeaveBalance(balance); setPaidLeaveBalance(saved); }} onCancel={handleLeaveRequestCancel} onEdit={() => setActiveTab("requests")} />
             ) : activeTab === "dashboard" ? (
@@ -2132,13 +1970,12 @@ export default function App() {
                       <div className="dashboard-blue-period">
                         {dateRange.length > 0 ? `${format(dateRange[0], "yyyy年M月d日")}〜${format(dateRange[dateRange.length - 1], "M月d日")}` : "期間未設定"}
                       </div>
-                      <button className="dashboard-install-button" onClick={installToHomeScreen}><Smartphone className="h-4 w-4" />{installLabel}</button>
+                      
                     </div>
                     <div className="dashboard-blue-controls">
-                      <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
-                      <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
-                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><div className="dashboard-period-title"><div className="dashboard-title-status"><strong>{dashboardTitle}</strong><span>{isLocked ? "確定シフト" : "シフト案・編集中"}</span></div><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button>{isFromAdmin && <Button disabled={periodStatusLoading} size="sm" className={`dashboard-lock-button ${isLocked ? "is-unlock" : ""}`} onClick={toggleLock}>{isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{periodStatusLoading ? "処理中…" : isLocked ? "確定を解除" : "シフトを確定"}</Button>}</div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
-                      <label><span>名前</span><select value="dashboard" onChange={event => { if (event.target.value !== "dashboard") { setActiveTab(event.target.value); setIsFromAdmin(false); } }}><option value="dashboard">全員</option>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
+                      
+                      <div className="dashboard-period-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><div className="dashboard-period-title"><div className="dashboard-title-status"><strong>{dashboardTitle}</strong><span>{isLocked ? "確定シフト" : "シフト案・編集中"}</span></div><Button variant="outline" size="sm" className="dashboard-list-toggle" onClick={() => setDashboardListView(value => !value)}><Grid3X3 className="w-3.5 h-3.5 mr-1.5" />{dashboardListView ? "通常表示" : "一覧表示"}</Button>{isFromAdmin && <Button disabled={periodStatusLoading} size="sm" className={`dashboard-lock-button ${isLocked ? "is-unlock" : ""}`} onClick={toggleLock}>{isLocked ? <LockOpen className="w-3.5 h-3.5 mr-1" /> : <LockKeyhole className="w-3.5 h-3.5 mr-1" />}{periodStatusLoading ? "処理中…" : isLocked ? "確定を解除" : "シフトを確定"}</Button>}</div><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div>
+                      
                     </div>
                   </CardHeader>
                   <CardContent className="p-0 md:flex-1 md:min-h-0 md:flex md:flex-col">
@@ -2491,7 +2328,7 @@ export default function App() {
                         <div className="employee-blue-controls">
                           <label><span>表示年</span><select value={currentMonth.getFullYear()} onChange={event => { const next = new Date(currentMonth); next.setFullYear(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map(year => <option key={year} value={year}>{year}年</option>)}</select></label>
                           <label><span>表示月</span><select value={currentMonth.getMonth()} onChange={event => { const next = new Date(currentMonth); next.setMonth(Number(event.target.value)); setCurrentMonth(next); }}>{Array.from({ length: 12 }, (_, month) => <option key={month} value={month}>{month + 1}月</option>)}</select></label>
-                          <div className="employee-month-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前月</Button><strong>{format(dateRange[0], "M月d日")}〜{format(dateRange[dateRange.length - 1], "M月d日")}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次月<ChevronRight className="h-4 w-4" /></Button></div>
+                          <div className="employee-month-step"><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, -1))}><ChevronLeft className="h-4 w-4" />前の期間</Button><strong>{format(dateRange[0], "M月d日")}〜{format(dateRange[dateRange.length - 1], "M月d日")}</strong><Button variant="outline" size="sm" onClick={() => setCurrentMonth(prev => addMonths(prev, 1))}>次の期間<ChevronRight className="h-4 w-4" /></Button></div>
                           <label><span>名前</span><select value={emp.id} onChange={event => setActiveTab(event.target.value)}>{dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}</select></label>
                         </div>
                       </CardHeader>

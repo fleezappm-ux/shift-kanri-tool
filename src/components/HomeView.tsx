@@ -76,7 +76,7 @@ export function HomeView({
           <div className="home-brand-copy">
             <span>PHARMACY SHIFT</span>
             <div className="home-title-line">
-              <h1>薬局シフト</h1>
+              <h1 className={isEditor ? "home-admin-title" : ""}>{isEditor ? "シフト管理者" : "薬局シフト"}</h1>
               <span className="home-operator"><UserRound className="h-4 w-4" />操作員：{operatorName}</span>
             </div>
           </div>
@@ -125,7 +125,7 @@ export function HomeView({
         <Button variant="outline" className="w-full mt-3 h-10 font-bold" onClick={onShowDashboard}>月の全体シフトを見る <ArrowRight className="w-4 h-4 ml-2" /></Button>
       </section>
 
-      <div><BulletinBoard compact periods={[{ label: boardMonthLabel, locked: boardLocked, requests }]} isEditor={isEditor} visibility={boardVisibility} correctionVisibility={correctionVisibility} operatorName={operatorName} /><button type="button" onClick={onOpenBoard} className="mt-2 text-sm font-bold text-blue-600">掲示板を開く ›</button></div>
+      <BulletinBoard compact periods={[{ label: boardMonthLabel, locked: boardLocked, requests }]} isEditor={isEditor} visibility={boardVisibility} correctionVisibility={correctionVisibility} operatorName={operatorName} onOpenBoard={onOpenBoard} />
 
       <button className="home-leave-request" onClick={onOpenLeaveRequest}>
         <CalendarDays className="w-5 h-5" /><div><strong>休み希望日を提出する</strong><span>希望受付中のシフト案に提出できます</span></div><ArrowRight className="w-5 h-5" />

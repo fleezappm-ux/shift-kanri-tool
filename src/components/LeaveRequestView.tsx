@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale/ja";
 import { Send, Trash2 } from "lucide-react";
@@ -20,15 +20,18 @@ interface Props {
   onSubmit: (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => Promise<LeaveRequest>;
   onCancel: (id: string) => Promise<void>;
   onSaveWorkTime: (id: string, start: string, end: string) => Promise<void>;
+  onPeriodChange: (direction: number) => Promise<void>;
 }
 
-export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, operatorId, onSubmit, onCancel, onSaveWorkTime }: Props) {
+export function LeaveRequestView({ employees, dates, requests, remarks, locked, loading, operatorId, onSubmit, onCancel, onSaveWorkTime, onPeriodChange }: Props) {
   const operator = employees.find(item => item.id === operatorId);
   const employeeName = operator?.displayName || operator?.name || "";
   const [drafts, setDrafts] = useState<DraftMap>({});
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [times, setTimes] = useState<Record<string, { start: string; end: string }>>({});
+  const periodStart = dates[0] ? format(dates[0], "yyyy-MM-dd") : "";
+  useEffect(() => { setDrafts({}); setComment(""); setTimes({}); }, [periodStart]);
   const mine = useMemo(() => requests.filter(item => item.employeeName === employeeName && item.status !== "取消"), [requests, employeeName]);
   const requestByDate = new Map<string, LeaveRequest>(mine.filter(item => item.date).map(item => [item.date, item] as [string, LeaveRequest]));
   const periodLabel = dates.length ? `${format(dates[0], "yyyy/M/d")} ～ ${format(dates[dates.length - 1], "M/d")}` : "期間未設定";
@@ -68,7 +71,11 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
     <div className="leave-request-page space-y-4 pb-5">
       <header className="leave-request-hero leave-request-hero-v2">
         <h1>休み希望提出</h1>
-        <strong className="leave-request-period">{periodLabel}</strong>
+        <nav className="leave-period-nav" aria-label="休み希望の対象期間">
+          <button type="button" onClick={() => void onPeriodChange(-1)} disabled={loading || submitting}>‹ 前の期間</button>
+          <strong className="leave-request-period">{periodLabel}</strong>
+          <button type="button" onClick={() => void onPeriodChange(1)} disabled={loading || submitting}>次の期間 ›</button>
+        </nav>
         <span className="leave-request-operator"><small>操作員</small><strong>{employeeName || "未選択"}</strong></span>
       </header>
 

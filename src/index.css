@@ -278,3 +278,8 @@ body { margin:0; background:#f5f7fa; }
 .leave-status.status-却下, .status-却下 .leave-status { background:#fee2e2; color:#b91c1c; }
 
 .leave-note-lines>div.work-time-missing{border:2px solid #f59e0b;background:#fffbeb}
+.home-title-line .home-admin-title{display:inline-block;border-radius:8px;background:#fff1f2;color:#bd1830;padding:2px 10px;font-weight:950;letter-spacing:.03em}
+.leave-period-nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.leave-period-nav button{border:1px solid rgba(255,255,255,.55);border-radius:8px;padding:7px 9px;color:#fff;font-size:12px;font-weight:800;white-space:nowrap}
+.leave-period-nav button:hover{background:rgba(255,255,255,.15)}
+@media(max-width:900px){.leave-period-nav{grid-column:1/-1;grid-row:2}.leave-period-nav .leave-request-period{grid-column:auto;grid-row:auto;text-align:center;font-size:15px;white-space:normal}}

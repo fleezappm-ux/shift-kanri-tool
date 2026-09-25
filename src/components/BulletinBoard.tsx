@@ -6,9 +6,9 @@ import { LeaveRequest } from "../types";
 
 export type BoardVisibility = "immediate" | "after_approval" | "private";
 export interface BoardPeriod { label: string; locked: boolean; requests: LeaveRequest[]; }
-interface Props { periods: BoardPeriod[]; isEditor: boolean; visibility?: BoardVisibility; correctionVisibility?: "all" | "private"; operatorName?: string; compact?: boolean; onResolve?: (request: LeaveRequest) => Promise<void>; onShiftPeriod?: (direction: number) => void; }
+interface Props { periods: BoardPeriod[]; isEditor: boolean; visibility?: BoardVisibility; correctionVisibility?: "all" | "private"; operatorName?: string; compact?: boolean; onResolve?: (request: LeaveRequest) => Promise<void>; onShiftPeriod?: (direction: number) => void; onOpenBoard?: () => void; }
 
-export function BulletinBoard({ periods, isEditor, visibility = "immediate", correctionVisibility = "private", operatorName, compact = false, onResolve, onShiftPeriod }: Props) {
+export function BulletinBoard({ periods, isEditor, visibility = "immediate", correctionVisibility = "private", operatorName, compact = false, onResolve, onShiftPeriod, onOpenBoard }: Props) {
   const [resolving, setResolving] = useState<string | null>(null);
   const canShow = (item: LeaveRequest) => {
     if (item.status === "取消") return false;
@@ -28,6 +28,22 @@ export function BulletinBoard({ periods, isEditor, visibility = "immediate", cor
     {item.type === "出勤希望" && item.desiredWorkStart && item.desiredWorkEnd && <p className="mt-1 text-xs">{item.desiredWorkStart}〜{item.desiredWorkEnd}</p>}
     {item.type === "訂正依頼" && item.status === "申請中" && isEditor && onResolve && <button type="button" disabled={resolving === item.id} className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-bold text-red-700" onClick={async () => { setResolving(item.id); try { await onResolve(item); } finally { setResolving(null); } }}>対応済みにする</button>}
   </article>;
+  if (compact) {
+    const period = visiblePeriods[0];
+    const visible = period?.requests.filter(canShow).filter(item => !(item.type === "訂正依頼" && item.status === "申請中")) || [];
+    return <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 px-5 py-4">
+        <h2 className="flex items-center gap-2 text-lg font-black text-slate-900"><MessageSquareText className="h-5 w-5 text-amber-600" />お知らせ掲示板</h2>
+        <span className="text-xs font-bold text-amber-800">{period?.label || "期間未設定"}</span>
+      </div>
+      <div className="space-y-2 p-4">
+        {corrections.map(renderItem)}
+        {visible.map(renderItem)}
+        {!corrections.length && !visible.length && <p className="py-4 text-center text-sm text-slate-400">現在お知らせはありません</p>}
+      </div>
+      {onOpenBoard && <button type="button" onClick={onOpenBoard} className="w-full border-t border-amber-100 px-5 py-3 text-right text-sm font-bold text-blue-700">お知らせをすべて見る ›</button>}
+    </section>;
+  }
   return <section className="bulletin-board-page space-y-4">
     <header className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm"><h1 className="flex items-center gap-2 text-xl font-black"><MessageSquareText className="h-6 w-6 text-amber-600" />お知らせ掲示板</h1>{!compact && <p className="mt-1 text-xs text-slate-500">選んだ期間から3期間分のお知らせ</p>}</header>
     {!compact && <nav className="flex items-center justify-between rounded-xl border bg-white p-3" aria-label="掲示板の表示期間"><button onClick={() => onShiftPeriod?.(-1)}>‹ 前の期間</button><strong>{visiblePeriods[0]?.label || "期間未設定"}から3期間</strong><button onClick={() => onShiftPeriod?.(1)}>次の期間 ›</button></nav>}

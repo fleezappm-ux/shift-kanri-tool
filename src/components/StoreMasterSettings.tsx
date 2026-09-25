@@ -8,6 +8,7 @@ import { SpecialDayColor } from "../types";
 
 export interface StoreMaster {
   storeName: string;
+  leaveRequestBoardVisibility: "immediate" | "after_approval" | "private";
   businessDays: number[];
   useJapaneseHolidays: boolean;
   yearEndEnabled: boolean;
@@ -25,7 +26,7 @@ export interface StoreMaster {
 }
 
 export const DEFAULT_STORE_MASTER: StoreMaster = {
-  storeName: "あおい薬局", businessDays: [1, 2, 3, 4, 5, 6], useJapaneseHolidays: true,
+  storeName: "あおい薬局", leaveRequestBoardVisibility: "immediate", businessDays: [1, 2, 3, 4, 5, 6], useJapaneseHolidays: true,
   yearEndEnabled: true, yearEndStart: "12-31", yearEndEnd: "01-03",
   obonEnabled: true, obonStart: "08-13", obonEnd: "08-15",
   holidayBandEnabled: true, holidayColor: "red", yearEndBandEnabled: true, yearEndColor: "red", obonBandEnabled: true, obonColor: "red"
@@ -68,6 +69,15 @@ export function StoreMasterSettings({ master, onMasterChange, period, periodDraf
         <span className="pb-3 text-center text-sm font-bold text-blue-600">→</span>
         <label><span className="mb-2 block text-xs font-bold text-slate-600">終了日（自動）</span><div className={`${field} flex items-center bg-slate-50`}>{periodDraft.endDay === 0 ? "同月末日" : `翌月${periodDraft.endDay}日`}</div></label>
       </div>
+    </div>
+    <div className={panel}>
+      <h4 className={heading}>休み希望の掲示板公開</h4>
+      <p className={description}>従業員が提出した休み希望を、他の従業員へいつ表示するかを店舗ごとに設定します。</p>
+      <select className={`${field} mt-4`} value={draft.leaveRequestBoardVisibility || "immediate"} onChange={event => setDraft(current => ({ ...current, leaveRequestBoardVisibility: event.target.value as StoreMaster["leaveRequestBoardVisibility"] }))}>
+        <option value="immediate">提出と同時に全員へ公開</option>
+        <option value="after_approval">管理者確認後に全員へ公開</option>
+        <option value="private">本人と編集者だけに表示</option>
+      </select>
     </div>
     <div className={panel}>
       <h4 className={heading}>通常の営業曜日</h4><p className={description}>青は「営業日」、灰色は「休み」です。曜日を押すと切り替わります。</p>

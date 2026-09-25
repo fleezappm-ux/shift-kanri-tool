@@ -123,7 +123,7 @@ export function HomeView({
         <Button variant="outline" className="w-full mt-3 h-10 font-bold" onClick={onShowDashboard}>月の全体シフトを見る <ArrowRight className="w-4 h-4 ml-2" /></Button>
       </section>
 
-      {!boardLocked && <div onClick={onOpenBoard}><BulletinBoard requests={requests} monthLabel={boardMonthLabel} isEditor={isEditor} locked={boardLocked} /></div>}
+      {!boardLocked && <div onClick={onOpenBoard}><BulletinBoard periods={[{ label: boardMonthLabel, locked: boardLocked, requests }]} isEditor={isEditor} operatorName={operatorName} /></div>}
 
       <button className="home-leave-request" onClick={onOpenLeaveRequest}>
         <CalendarDays className="w-5 h-5" /><div><strong>休み希望日を提出する</strong><span>希望受付中のシフト案に提出できます</span></div><ArrowRight className="w-5 h-5" />

@@ -58,8 +58,8 @@ export interface Employee {
 export type EmployeeRole = "薬剤師" | "事務員" | "登録販売者";
 export type CommentVisibility = "all" | "editors";
 
-export type LeaveRequestType = "有給希望" | "休み希望" | "出勤希望" | "午前休希望" | "午後休希望" | "希望なし";
-export type LeaveRequestStatus = "申請中" | "承認" | "却下" | "取消";
+export type LeaveRequestType = "有給希望" | "休み希望" | "出勤希望" | "午前休希望" | "午後休希望" | "希望なし" | "訂正依頼";
+export type LeaveRequestStatus = "申請中" | "承認" | "却下" | "取消" | "対応済み";
 
 export interface LeaveRequest {
   id: string;

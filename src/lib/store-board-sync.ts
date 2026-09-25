@@ -28,3 +28,12 @@ export async function saveBoardVisibility(visibility: BoardVisibility): Promise<
   const value = json.visibility;
   return value === "after_approval" || value === "private" ? value : "immediate";
 }
+
+export async function fetchCorrectionVisibility(): Promise<"all" | "private"> {
+  const json = await call("getShiftCorrectionVisibility");
+  return json.visibility === "all" ? "all" : "private";
+}
+export async function saveCorrectionVisibility(visibility: "all" | "private"): Promise<"all" | "private"> {
+  const json = await call("saveShiftCorrectionVisibility", { visibility });
+  return json.visibility === "all" ? "all" : "private";
+}

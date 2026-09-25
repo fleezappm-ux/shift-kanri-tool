@@ -276,3 +276,5 @@ body { margin:0; background:#f5f7fa; }
 .leave-status.status-承認, .status-承認 .leave-status { background:#dcfce7; color:#15803d; }
 .leave-status.status-申請中, .status-申請中 .leave-status { background:#fef3c7; color:#a16207; }
 .leave-status.status-却下, .status-却下 .leave-status { background:#fee2e2; color:#b91c1c; }
+
+.leave-note-lines>div.work-time-missing{border:2px solid #f59e0b;background:#fffbeb}

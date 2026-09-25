@@ -64,12 +64,12 @@ import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 import { LeaveRequestView } from "./components/LeaveRequestView";
 import { LeaveRequestManager } from "./components/LeaveRequestManager";
 import { PersonalShiftList } from "./components/PersonalShiftList";
-import { cancelLeaveRequest, fetchLeaveRequests, fetchPaidLeaveBalance, savePaidLeaveBalance, submitLeaveRequest, updateLeaveRequestStatus } from "./lib/leave-request-sync";
+import { cancelLeaveRequest, fetchLeaveRequests, fetchPaidLeaveBalance, savePaidLeaveBalance, submitLeaveRequest, updateLeaveRequestStatus, updateLeaveRequestWorkTime } from "./lib/leave-request-sync";
 import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
 import { CalendarPeriodSettings, fetchCalendarPeriodSettings, saveCalendarPeriodSettings } from "./lib/calendar-period-sync";
-import { BoardVisibility, fetchBoardVisibility, saveBoardVisibility } from "./lib/store-board-sync";
+import { BoardVisibility, fetchBoardVisibility, saveBoardVisibility, fetchCorrectionVisibility, saveCorrectionVisibility } from "./lib/store-board-sync";
 import { getManagementApiKey, logoutShiftSession, saveManagementApiKey, ShiftSession } from "./lib/auth-sync";
 import { DropdownMasterSettings } from "./components/DropdownMasterSettings";
 import { DEFAULT_STORE_MASTER, StoreMaster, StoreMasterSettings } from "./components/StoreMasterSettings";
@@ -235,6 +235,8 @@ export default function App() {
   const [leaveRequestLoading, setLeaveRequestLoading] = useState(false);
   const [homeBoardRequests, setHomeBoardRequests] = useState<LeaveRequest[]>([]);
   const [boardPeriods, setBoardPeriods] = useState<BoardPeriod[]>([]);
+  const [boardAnchor, setBoardAnchor] = useState(() => getCurrentShiftMonth(new Date(), { startDay: 21, endDay: 20 }));
+  const [correctionVisibility, setCorrectionVisibility] = useState<"all" | "private">("all");
   const [specialDayRules, setSpecialDayRules] = useState<SpecialDayRule[]>(DEFAULT_SPECIAL_DAY_RULES);
   const [specialDayLoading, setSpecialDayLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -300,6 +302,11 @@ export default function App() {
   }, [appSession?.token]);
 
   useEffect(() => {
+    if (!appSession?.token) return;
+    void fetchCorrectionVisibility().then(setCorrectionVisibility).catch(error => console.error("訂正依頼公開設定を取得できませんでした", error));
+  }, [appSession?.token]);
+
+  useEffect(() => {
     const captureInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -359,13 +366,13 @@ export default function App() {
     if (!appSession?.token) return;
     const range = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
     fetchLeaveRequests(getDateStr(range[0]), getDateStr(range[range.length - 1])).then(setHomeBoardRequests).catch(() => setHomeBoardRequests([]));
-  }, [appSession?.token, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+  }, [appSession?.token, leaveRequests, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   useEffect(() => {
     if (!appSession?.token || activeTab !== "board") return;
     let cancelled = false;
     const loadBoardPeriods = async () => {
-      const anchors = [currentMonth];
+      const anchors = [boardAnchor, addMonths(boardAnchor, 1), addMonths(boardAnchor, 2)];
       const loaded = await Promise.all(anchors.map(async anchor => {
         const range = generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
         const start = getDateStr(range[0]);
@@ -377,7 +384,7 @@ export default function App() {
     };
     void loadBoardPeriods().catch(error => { console.error("掲示板の取得に失敗しました", error); if (!cancelled) setBoardPeriods([]); });
     return () => { cancelled = true; };
-  }, [appSession?.token, activeTab, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+  }, [appSession?.token, activeTab, boardAnchor, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   const changeHomeWeek = (offset: number) => {
     const today = new Date();
@@ -431,6 +438,9 @@ export default function App() {
   const [initialSyncComplete, setInitialSyncComplete] = useState(false);
   const skipDirtyRef = useRef(false);
   const skipRemarkDirtyRef = useRef(false);
+  const editRevisionRef = useRef(0);
+  const savedRevisionRef = useRef(0);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (!appSession?.token) return;
     let cancelled = false;
@@ -475,7 +485,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appSession?.token]);
 
-  // 編集内容はまず端末内へ保存し、Notionへの反映は「Notionへ保存」ボタンでだけ行います。
+  // 編集内容を端末内へ保存し、管理者の変更は短い待機後に共有保存します。
   useEffect(() => {
     if (employees.length > 0) {
       localStorage.setItem("shift_data", JSON.stringify(employees));
@@ -485,6 +495,7 @@ export default function App() {
       skipDirtyRef.current = false;
       return;
     }
+    editRevisionRef.current += 1;
     setSyncState("dirty");
   }, [employees]);
 
@@ -499,6 +510,7 @@ export default function App() {
       skipRemarkDirtyRef.current = false;
       return;
     }
+    editRevisionRef.current += 1;
     setSyncState("dirty");
   }, [globalRemarks]);
 
@@ -563,6 +575,7 @@ export default function App() {
     }
     setPeriodStatusLoading(true);
     try {
+      if (nextLocked) await saveCurrentMonth();
       const savedLocked = await saveShiftPeriodStatus(getDateStr(dateRange[0]), getDateStr(dateRange[dateRange.length - 1]), nextLocked);
       setLockedMonths(prev => savedLocked
         ? [...new Set([...prev, currentMonthKey])]
@@ -685,14 +698,16 @@ export default function App() {
   }, [activeTab, appSession?.token]);
 
   const handleLeaveRequestSubmit = async (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => {
-    if (!dateRange.length) return;
+    if (!dateRange.length) throw new Error("対象期間がありません");
     setLeaveRequestLoading(true);
     try {
       const saved = await submitLeaveRequest({ ...input, periodStart: getDateStr(dateRange[0]), periodEnd: getDateStr(dateRange[dateRange.length - 1]) });
-      setLeaveRequests(prev => [...prev.filter(item => item.id !== saved.id && !(item.employeeName === saved.employeeName && item.date === saved.date)), saved]);
-      toast.success(input.type === "希望なし" ? "希望なしで提出しました" : "希望を提出しました");
+      setLeaveRequests(prev => [...prev.filter(item => item.id !== saved.id && !(item.employeeName === saved.employeeName && item.date === saved.date && (item.type === "訂正依頼") === (saved.type === "訂正依頼"))), saved]);
+      toast.success(input.type === "訂正依頼" ? "訂正依頼を提出しました" : "希望を提出しました");
+      return saved;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "希望を提出できませんでした");
+      throw error;
     } finally { setLeaveRequestLoading(false); }
   };
 
@@ -973,33 +988,33 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonthKey, initialSyncComplete, specialDayRules]);
 
-  const saveCurrentMonth = async () => {
-    if (syncState === "saving" || dateRange.length === 0) return;
-    const savingEditor = appSession?.employeeName || "シフト編集者";
-    setSyncState("saving");
-    setSaveFeedback({ kind: "saving", message: "Notionへ保存しています。この画面を閉じずにお待ちください" });
-    try {
-      const result = await saveMonthToServer(
-        employees,
-        globalRemarks,
-        getDateStr(dateRange[0]),
-        getDateStr(dateRange[dateRange.length - 1]),
-        savingEditor
-      );
-      setSyncState("saved");
-      const successMessage = `${format(currentMonth, "yyyy年MM月")}をNotionへ保存しました（新規${result.created}・更新${result.updated}・削除${result.cleared}）`;
-      setSaveFeedback({ kind: "success", message: successMessage });
-      toast.success(successMessage, { duration: 10000 });
-    } catch (error) {
-      console.error("月次一括保存に失敗しました:", error);
-      setSyncState("offline");
-      const detail = error instanceof Error ? error.message : "原因不明のエラー";
-      setSaveFeedback({ kind: "error", message: `保存できませんでした：${detail}` });
-      toast.error(`Notionへの保存に失敗しました：${detail}（編集内容は端末内に残っています）`, {
-        duration: 12000
-      });
-    }
+  // Serialize saves so an older request cannot overwrite a newer edit.
+  const saveCurrentMonth = (): Promise<void> => {
+    if (!dateRange.length) return Promise.resolve();
+    const revision = editRevisionRef.current;
+    const snapshot = { employees, globalRemarks, start: getDateStr(dateRange[0]), end: getDateStr(dateRange[dateRange.length - 1]), editor: appSession?.employeeName || "シフト編集者" };
+    const task = saveQueueRef.current.catch(() => {}).then(async () => {
+      if (savedRevisionRef.current >= revision) return;
+      setSyncState("saving");
+      try {
+        await saveMonthToServer(snapshot.employees, snapshot.globalRemarks, snapshot.start, snapshot.end, snapshot.editor);
+        savedRevisionRef.current = revision;
+        setSyncState(editRevisionRef.current === revision ? "saved" : "dirty");
+      } catch (error) {
+        setSyncState("offline");
+        toast.error(error instanceof Error ? error.message : "自動保存に失敗しました。編集内容は端末に残っています");
+        throw error;
+      }
+    });
+    saveQueueRef.current = task.catch(() => {});
+    return task;
   };
+
+  useEffect(() => {
+    if (appSession?.role !== "admin" || !initialSyncComplete || isLocked || syncState !== "dirty") return;
+    const timer = window.setTimeout(() => { void saveCurrentMonth().catch(() => {}); }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [employees, globalRemarks, currentMonthKey, syncState, initialSyncComplete, isLocked, appSession?.role]);
 
   const handleShiftChange = (employeeId: string, date: string, shift: ShiftType | "none") => {
     if (isLocked) {
@@ -1897,17 +1912,10 @@ export default function App() {
           <Button variant="ghost" className="w-full justify-start text-slate-500" onClick={() => { logoutShiftSession(); setAppSession(null); setActiveTab("home"); setIsFromAdmin(false); }}>
             ログアウト
           </Button>
-          {appSession.role === "admin" && <><Button
-            className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
-            onClick={() => requestEditAccess(() => { void saveCurrentMonth(); })}
-            disabled={syncState === "loading" || syncState === "saving" || syncState === "saved"}
-          >
-            <CloudUpload className="w-4 h-4 mr-2" />
-            {syncState === "saving" ? `保存中… ${saveElapsedSeconds}秒` : syncState === "saved" ? "保存済み" : "Notionへ保存"}
-          </Button>
+          {appSession.role === "admin" && <>
           <div className="sync-indicator flex items-center gap-2 text-xs">
             <span className={`sync-dot ${syncState}`} />
-            {syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "月単位で保存中" : syncState === "dirty" ? "未保存の変更あり" : syncState === "offline" ? "保存失敗（端末内に保存済み）" : "Notionに保存済み"}
+            {syncState === "loading" ? "Notionを読込中" : syncState === "saving" ? "自動保存中" : syncState === "dirty" ? "自動保存待ち" : syncState === "offline" ? "保存失敗（端末内に保存済み）" : "Notionに保存済み"}
           </div></>}
         </div>
       </aside>
@@ -1973,15 +1981,17 @@ export default function App() {
                 requests={homeBoardRequests}
                 boardMonthLabel={(() => { const r = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay); return r.length ? `${format(r[0], "M/d")}〜${format(r[r.length - 1], "M/d")}` : "期間未設定"; })()}
                 boardLocked={false}
+                boardVisibility={storeMaster.leaveRequestBoardVisibility || "immediate"}
+                correctionVisibility={correctionVisibility}
                 isEditor={appSession.role === "admin"}
-                onOpenBoard={() => { setCurrentMonth(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}
+                onOpenBoard={() => { setBoardAnchor(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}
               />
             ) : activeTab === "requests" ? (
-              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} />
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} />
             ) : activeTab === "board" ? (
-              <BulletinBoard periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} operatorName={appSession.employeeName} />
+              <BulletinBoard periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} correctionVisibility={correctionVisibility} operatorName={appSession.employeeName} onShiftPeriod={direction => setBoardAnchor(prev => addMonths(prev, direction))} onResolve={async item => { const saved = await updateLeaveRequestStatus(item.id, "対応済み"); setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.map(request => request.id === saved.id ? saved : request) }))); setHomeBoardRequests(prev => prev.map(request => request.id === saved.id ? saved : request)); }} />
             ) : activeTab === "mypage" ? (
-              <MyPage employee={operatorEmployee} requests={leaveRequests} locked={isLocked} initialBalance={paidLeaveBalance} onSaveBalance={async balance => { const saved = await savePaidLeaveBalance(balance); setPaidLeaveBalance(saved); }} onCancel={handleLeaveRequestCancel} onEdit={() => setActiveTab("requests")} />
+              <MyPage employee={operatorEmployee} requests={leaveRequests} locked={isLocked} initialBalance={paidLeaveBalance} onSaveBalance={async balance => { const saved = await savePaidLeaveBalance(balance); setPaidLeaveBalance(saved); }} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} onEdit={() => setActiveTab("requests")} />
             ) : activeTab === "dashboard" ? (
               <motion.div
                 key="dashboard"
@@ -2187,9 +2197,6 @@ export default function App() {
                       { key: "board", icon: MessageSquareText, title: "お知らせ掲示板マスタ", description: "休み希望を掲示板へ公開するタイミング" },
                       { key: "employee", icon: Users, title: "従業員設定", description: "従業員マスター、役職、表示順" },
                       { key: "shift", icon: SlidersHorizontal, title: "シフト設定", description: "自動作成、クール、特殊日、プルダウン" },
-                      { key: "dropdown", icon: ListChecks, title: "プルダウンマスター", description: "備考項目の名前、帯色、動作、有効・無効、並び順" },
-                      { key: "special", icon: CalendarDays, title: "特殊日設定", description: "当番薬局、当番医、臨時休業など年ごとに変わる日付" },
-                      { key: "autodraft", icon: CalendarClock, title: "シフト案自動作成", description: "3か月先までの案をクールと休業日ルールから作成" },
                     ].map(item => <button key={item.key} type="button" onClick={() => setSettingsPage(item.key as typeof settingsPage)} className="group flex min-h-32 items-center gap-4 rounded-2xl border-2 border-slate-100 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50/50">
                       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><item.icon className="h-6 w-6" /></span>
                       <span><strong className="flex items-center gap-2 text-base text-slate-900">{item.title}<ChevronRight className="h-4 w-4 transition group-hover:translate-x-1" /></strong><small className="mt-1 block leading-relaxed text-slate-500">{item.description}</small></span>
@@ -2204,7 +2211,7 @@ export default function App() {
             ) : activeTab === "admin" && settingsPage === "board" ? (
               <motion.div key="settings-board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                 <Card><CardHeader className="page-blue-header rounded-t-xl border-b py-5"><div className="flex items-center gap-3"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><div><CardTitle>お知らせ掲示板マスタ</CardTitle><CardDescription>承認済みの希望を従業員へ共有する設定</CardDescription></div></div></CardHeader>
-                <CardContent className="p-6 space-y-4"><label className="block text-sm font-bold">休み希望の公開設定<select className="mt-2 h-11 w-full rounded-xl border bg-white px-3" value={storeMaster.leaveRequestBoardVisibility || "immediate"} onChange={e => setStoreMaster(v => ({...v, leaveRequestBoardVisibility:e.target.value as StoreMaster["leaveRequestBoardVisibility"]}))}><option value="immediate">提出と同時に全員へ公開</option><option value="after_approval">管理者確認後に全員へ公開</option><option value="private">本人と編集者だけに表示</option></select></label><Button className="w-full h-11 font-bold" onClick={() => void handleSaveBoardVisibility(storeMaster.leaveRequestBoardVisibility)}>お知らせ掲示板マスタを保存</Button></CardContent></Card>
+                <CardContent className="p-6 space-y-4"><label className="block text-sm font-bold">休み希望の公開設定<select className="mt-2 h-11 w-full rounded-xl border bg-white px-3" value={storeMaster.leaveRequestBoardVisibility || "immediate"} onChange={e => setStoreMaster(v => ({...v, leaveRequestBoardVisibility:e.target.value as StoreMaster["leaveRequestBoardVisibility"]}))}><option value="immediate">提出と同時に全員へ公開</option><option value="after_approval">管理者確認後に全員へ公開</option><option value="private">本人と編集者だけに表示</option></select></label><Button className="w-full h-11 font-bold" onClick={() => void handleSaveBoardVisibility(storeMaster.leaveRequestBoardVisibility)}>お知らせ掲示板マスタを保存</Button><div className="border-t pt-4"><label className="block text-sm font-bold">確定シフト訂正依頼の公開範囲<select className="mt-2 h-11 w-full rounded-xl border bg-white px-3" value={correctionVisibility} onChange={e => setCorrectionVisibility(e.target.value as "all" | "private")}><option value="all">全員に表示</option><option value="private">本人と管理者のみ表示</option></select></label><Button className="mt-3 w-full h-11" onClick={async () => { try { setCorrectionVisibility(await saveCorrectionVisibility(correctionVisibility)); toast.success("訂正依頼の公開設定を保存しました"); } catch (error) { toast.error(error instanceof Error ? error.message : "保存できませんでした"); } }}>訂正依頼の公開設定を保存</Button></div></CardContent></Card>
               </motion.div>
             ) : activeTab === "admin" && settingsPage === "employee" ? (
               <motion.div key="settings-employee" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4"><Button variant="outline" size="sm" onClick={() => setSettingsPage("menu")}><ArrowLeft className="mr-1 h-4 w-4" />設定へ戻る</Button><EmployeeMasterSettings employees={employeeMaster} onSave={handleSaveEmployeeMaster} /></motion.div>

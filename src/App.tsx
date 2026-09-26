@@ -234,6 +234,7 @@ export default function App() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [leaveRequestLoading, setLeaveRequestLoading] = useState(false);
   const [homeBoardRequests, setHomeBoardRequests] = useState<LeaveRequest[]>([]);
+  const [homePendingCorrections, setHomePendingCorrections] = useState<LeaveRequest[]>([]);
   const [boardPeriods, setBoardPeriods] = useState<BoardPeriod[]>([]);
   const [boardAnchor, setBoardAnchor] = useState(() => getCurrentShiftMonth(new Date(), { startDay: 21, endDay: 20 }));
   const [correctionVisibility, setCorrectionVisibility] = useState<"all" | "private">("all");
@@ -364,9 +365,24 @@ export default function App() {
 
   useEffect(() => {
     if (!appSession?.token) return;
+    let cancelled = false;
     const range = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
-    fetchLeaveRequests(getDateStr(range[0]), getDateStr(range[range.length - 1])).then(setHomeBoardRequests).catch(() => setHomeBoardRequests([]));
-  }, [appSession?.token, leaveRequests, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
+    const requestsFor = (start: Date, end: Date) => fetchLeaveRequests(getDateStr(start), getDateStr(end));
+    const load = async () => {
+      const current = await requestsFor(range[0], range[range.length - 1]);
+      if (cancelled) return;
+      setHomeBoardRequests(current);
+      if (appSession.role !== "admin") { setHomePendingCorrections([]); return; }
+      const earlier = await Promise.all([-2, -1].map(offset => {
+        const anchor = addMonths(homeBoardMonth, offset);
+        const dates = generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);
+        return requestsFor(dates[0], dates[dates.length - 1]);
+      }));
+      if (!cancelled) setHomePendingCorrections([...earlier.flat(), ...current].filter(item => item.type === "訂正依頼" && item.status === "申請中"));
+    };
+    void load().catch(error => { console.error("ホームのお知らせ取得に失敗しました", error); if (!cancelled) { setHomeBoardRequests([]); setHomePendingCorrections([]); } });
+    return () => { cancelled = true; };
+  }, [appSession?.token, appSession?.role, leaveRequests, isLocked, currentMonthKey, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay]);
 
   useEffect(() => {
     if (!appSession?.token || activeTab !== "board") return;
@@ -1998,6 +2014,7 @@ export default function App() {
                 installLabel={installLabel}
                 operatorName={appSession.employeeName || "未選択"}
                 requests={homeBoardRequests}
+                pendingCorrections={homePendingCorrections}
                 boardMonthLabel={(() => { const r = generateConfiguredDateRange(homeBoardMonth.getFullYear(), homeBoardMonth.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay); return r.length ? `${format(r[0], "M/d")}〜${format(r[r.length - 1], "M/d")}` : "期間未設定"; })()}
                 boardLocked={false}
                 boardVisibility={storeMaster.leaveRequestBoardVisibility || "immediate"}
@@ -2008,7 +2025,7 @@ export default function App() {
             ) : activeTab === "requests" ? (
               <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading || periodStatusLoading} operatorId={appSession.employeeId || ""} onCheckPeriodStatus={fetchShiftPeriodStatus} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} onPeriodChange={async direction => { if (appSession.role === "admin" && (syncState === "dirty" || syncState === "saving")) { try { await saveCurrentMonth(); } catch { return; } } setCurrentMonth(prev => addMonths(prev, direction)); }} />
             ) : activeTab === "board" ? (
-              <BulletinBoard onBack={goBack} periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} correctionVisibility={correctionVisibility} operatorName={appSession.employeeName} onShiftPeriod={direction => setBoardAnchor(prev => addMonths(prev, direction))} onResolve={async item => { const saved = await updateLeaveRequestStatus(item.id, "対応済み"); setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.map(request => request.id === saved.id ? saved : request) }))); setHomeBoardRequests(prev => prev.map(request => request.id === saved.id ? saved : request)); }} />
+              <BulletinBoard onBack={goBack} periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} correctionVisibility={correctionVisibility} operatorName={appSession.employeeName} onShiftPeriod={direction => setBoardAnchor(prev => addMonths(prev, direction))} onResolve={async item => { const saved = await updateLeaveRequestStatus(item.id, "対応済み"); setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.map(request => request.id === saved.id ? saved : request) }))); setHomeBoardRequests(prev => prev.map(request => request.id === saved.id ? saved : request)); setHomePendingCorrections(prev => prev.filter(request => request.id !== saved.id)); }} />
             ) : activeTab === "mypage" ? (
               <MyPage employee={operatorEmployee} requests={leaveRequests} locked={isLocked} initialBalance={paidLeaveBalance} onSaveBalance={async balance => { const saved = await savePaidLeaveBalance(balance); setPaidLeaveBalance(saved); }} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} onEdit={() => setActiveTab("requests")} />
             ) : activeTab === "dashboard" ? (

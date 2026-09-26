@@ -197,7 +197,7 @@ export function LeaveRequestView({ employees, dates, requests, remarks, locked, 
           const remark = remarkFor(key);
           return <div key={key} className={`leave-personal-row ${colorFor(date, key) ? `special-${colorFor(date, key)}` : ""} ${drafts[key] ? "has-draft" : ""}`}>
             <div className="leave-personal-date"><strong>{format(date, "M/d")}</strong><small>{format(date, "E", { locale: ja })}</small></div>
-            <div className="leave-personal-work"><button type="button" disabled={loading || submitting} onClick={() => setOpenDate(openDate === key ? null : key)}><strong>{shiftLabelFor(operator, key)}</strong><small>{drafts[key]?.type || "希望を選ぶ"}</small></button>{(openDate === key || drafts[key]) && selectFor(key)}</div>
+            <div className="leave-personal-work"><button type="button" disabled={loading || submitting} onClick={() => setOpenDate(openDate === key ? null : key)}><strong>{shiftLabelFor(operator, key)}</strong><small>{drafts[key]?.type || "希望を選ぶ"}</small></button>{(openDate === key || drafts[key]) && selectFor(key)}{requestByDate.get(key) && !drafts[key] && <span className="leave-shift-existing">提出済：{requestByDate.get(key)?.type}</span>}</div>
             {remark && remark.type !== "なし" && <small className="leave-personal-remark">{remark.type}{remark.text ? `：${remark.text}` : ""}</small>}
           </div>;
         })}

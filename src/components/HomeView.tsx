@@ -24,6 +24,7 @@ interface HomeViewProps {
   installLabel: string;
   operatorName: string;
   requests: LeaveRequest[];
+  pendingCorrections: LeaveRequest[];
   boardMonthLabel: string;
   boardLocked: boolean;
   boardVisibility: "immediate" | "after_approval" | "private";
@@ -48,7 +49,7 @@ function shiftLabel(employee: Employee, date: string): string {
 export function HomeView({
   employees, remarks, weekDates, selectedDate, today, weekOffset, heatmapEnabled, monthDates,
   onWeekOffsetChange, onDateSelect, onShowDashboard, onEmployeeSelect, onOpenLeaveRequest, onInstall, installLabel,
-  operatorName, requests, boardMonthLabel, boardLocked, boardVisibility, correctionVisibility, isEditor, onOpenBoard
+  operatorName, requests, pendingCorrections, boardMonthLabel, boardLocked, boardVisibility, correctionVisibility, isEditor, onOpenBoard
 }: HomeViewProps) {
   const orderedEmployees = sortEmployeesForDisplay(employees);
   const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
@@ -125,7 +126,7 @@ export function HomeView({
         <Button variant="outline" className="w-full mt-3 h-10 font-bold" onClick={onShowDashboard}>月の全体シフトを見る <ArrowRight className="w-4 h-4 ml-2" /></Button>
       </section>
 
-      <BulletinBoard compact periods={[{ label: boardMonthLabel, locked: boardLocked, requests }]} isEditor={isEditor} visibility={boardVisibility} correctionVisibility={correctionVisibility} operatorName={operatorName} onOpenBoard={onOpenBoard} />
+      <BulletinBoard compact periods={[{ label: boardMonthLabel, locked: boardLocked, requests }]} pendingCorrections={isEditor ? pendingCorrections : undefined} isEditor={isEditor} visibility={boardVisibility} correctionVisibility={correctionVisibility} operatorName={operatorName} onOpenBoard={onOpenBoard} />
 
       <button className="home-leave-request" onClick={onOpenLeaveRequest}>
         <CalendarDays className="w-5 h-5" /><div><strong>休み希望日を提出する</strong><span>希望受付中のシフト案に提出できます</span></div><ArrowRight className="w-5 h-5" />

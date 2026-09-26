@@ -304,14 +304,14 @@ body { margin:0; background:#f5f7fa; }
 .leave-shift-switch button{min-height:40px;padding:0 10px;color:#1e3a5f;font-weight:900}
 .leave-shift-switch span{font-size:12px;color:#64748b}
 .leave-shift-table-scroll{max-width:100%;overflow-x:auto;border:1px solid #dbe3ee;border-radius:0 0 14px 14px;background:#fff}
-.leave-shift-table{width:100%;min-width:540px;border-collapse:collapse!important;table-layout:fixed}
-.leave-shift-table th,.leave-shift-table td{padding:8px 4px;border-right:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee;text-align:center}
-.leave-shift-table thead th{position:sticky;top:0;z-index:2;height:60px;background:#f8fafc!important;color:#334155!important;font-size:12px!important}
-.leave-shift-table th:first-child{width:72px}
-.leave-shift-table th:nth-child(2){width:42px}
+.leave-shift-table{width:100%;min-width:0;border-collapse:collapse!important;table-layout:fixed}
+.leave-shift-table th,.leave-shift-table td{min-width:0;padding:3px 2px;border-right:1px solid #dbe3ee;border-bottom:1px solid #dbe3ee;text-align:center;overflow-wrap:anywhere}
+.leave-shift-table thead th{position:sticky;top:0;z-index:2;height:36px;background:#f8fafc!important;color:#334155!important;font-size:10px!important}
+.leave-shift-table th:first-child{width:11%}
+.leave-shift-table th:nth-child(2){width:6%}
 .leave-shift-table thead th.is-own{background:#ffedd5!important;color:#9a3412!important}
-.leave-shift-table tbody th{font-size:12px;font-weight:850}
-.leave-shift-table tbody td{height:68px;font-size:11px}
+.leave-shift-table tbody th{font-size:10px;font-weight:850}
+.leave-shift-table tbody td{height:42px;font-size:10px;line-height:1.15}
 .leave-shift-table tbody tr.special-red>*,.leave-personal-row.special-red{background:#fee2e2!important}
 .leave-shift-table tbody tr.special-blue>*,.leave-personal-row.special-blue{background:#dbeafe!important}
 .leave-shift-table tbody tr.special-green>*,.leave-personal-row.special-green{background:#dcfce7!important}
@@ -320,10 +320,12 @@ body { margin:0; background:#f5f7fa; }
 .leave-shift-table tbody tr.special-gray>*,.leave-personal-row.special-gray{background:#f1f5f9!important}
 .leave-shift-cell.is-own{background:#fff7ed}
 .leave-shift-cell.has-draft,.leave-personal-row.has-draft{box-shadow:inset 0 0 0 2px #f59e0b}
-.leave-shift-pick{display:grid;width:100%;min-height:41px;place-items:center;padding:2px 0}
-.leave-shift-pick strong,.leave-personal-work strong{font-size:12px}
-.leave-shift-pick small,.leave-personal-work small{font-size:10px;color:#b45309;font-weight:850}
-.leave-shift-cell select,.leave-personal-work select{width:100%;min-height:32px;border:1px solid #e7a73b;border-radius:7px;background:#fff;color:#172033;font-size:11px;font-weight:850}
+.leave-shift-pick{display:grid;width:100%;min-height:0;place-items:center;padding:0;line-height:1.15}
+.leave-shift-pick strong{font-size:10px}.leave-personal-work strong{font-size:12px}
+.leave-shift-pick small{font-size:9px}.leave-personal-work small{font-size:10px}
+.leave-shift-pick small,.leave-personal-work small{color:#b45309;font-weight:850}
+.leave-shift-cell select,.leave-personal-work select{width:100%;min-height:27px;border:1px solid #e7a73b;border-radius:7px;background:#fff;color:#172033;font-size:10px;font-weight:850}
+.leave-personal-work select{min-height:32px;font-size:11px}
 .leave-shift-existing{display:block;font-size:9px;color:#6d28d9}
 .leave-shift-other{font-weight:800}
 .leave-personal-list{overflow:hidden;border:1px solid #dbe3ee;border-radius:12px;background:#fff}
@@ -346,7 +348,7 @@ body { margin:0; background:#f5f7fa; }
   .leave-shift-brand h1{font-size:18px}.leave-shift-full-period{margin:13px 0 0;font-size:20px}
   .leave-shift-period-nav{grid-template-columns:minmax(80px,1fr) minmax(102px,1.2fr) minmax(80px,1fr);gap:7px}.leave-shift-period-nav strong{font-size:16px}.leave-shift-period-nav button{font-size:12px}
   .leave-shift-switch{flex-wrap:wrap}.leave-shift-switch span{font-size:11px}
-  .leave-shift-table{min-width:540px}.leave-shift-table tbody td{padding:5px 2px}
+  .leave-shift-table{min-width:0}.leave-shift-table tbody td{padding:2px 1px}
   .leave-shift-page .leave-note-lines>div{grid-template-columns:90px minmax(0,1fr) 30px}
   .leave-shift-page .leave-note-lines strong{font-size:10px}
 }

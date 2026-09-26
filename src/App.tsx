@@ -697,12 +697,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, appSession?.token]);
 
-  const handleLeaveRequestSubmit = async (input: { employeeId: string; employeeName: string; date: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => {
-    if (!dateRange.length) throw new Error("対象期間がありません");
+  const handleLeaveRequestSubmit = async (input: { employeeId: string; employeeName: string; date: string; periodStart: string; periodEnd: string; type: LeaveRequestType; comment: string; commentVisibility: CommentVisibility }) => {
+    if (!input.periodStart || !input.periodEnd) throw new Error("対象期間がありません");
     setLeaveRequestLoading(true);
     try {
-      const saved = await submitLeaveRequest({ ...input, periodStart: getDateStr(dateRange[0]), periodEnd: getDateStr(dateRange[dateRange.length - 1]) });
-      setLeaveRequests(prev => [...prev.filter(item => item.id !== saved.id && !(item.employeeName === saved.employeeName && item.date === saved.date && (item.type === "訂正依頼") === (saved.type === "訂正依頼"))), saved]);
+      const saved = await submitLeaveRequest(input);
+      if (dateRange.length && input.periodStart === getDateStr(dateRange[0])) {
+        setLeaveRequests(prev => [...prev.filter(item => item.id !== saved.id && !(item.employeeName === saved.employeeName && item.date === saved.date && (item.type === "訂正依頼") === (saved.type === "訂正依頼"))), saved]);
+      }
       toast.success(input.type === "訂正依頼" ? "訂正依頼を提出しました" : "希望を提出しました");
       return saved;
     } catch (error) {
@@ -2004,7 +2006,7 @@ export default function App() {
                 onOpenBoard={() => { setBoardAnchor(homeBoardMonth); setActiveTab("board"); setIsFromAdmin(false); }}
               />
             ) : activeTab === "requests" ? (
-              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading} operatorId={appSession.employeeId || ""} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} onPeriodChange={async direction => { if (appSession.role === "admin" && (syncState === "dirty" || syncState === "saving")) { try { await saveCurrentMonth(); } catch { return; } } setCurrentMonth(prev => addMonths(prev, direction)); }} />
+              <LeaveRequestView employees={dashboardEmployees} dates={dateRange} remarks={displayRemarks} requests={leaveRequests} locked={isLocked} loading={leaveRequestLoading || periodStatusLoading} operatorId={appSession.employeeId || ""} onCheckPeriodStatus={fetchShiftPeriodStatus} onSubmit={handleLeaveRequestSubmit} onCancel={handleLeaveRequestCancel} onSaveWorkTime={async (id, start, end) => { const saved = await updateLeaveRequestWorkTime(id, start, end); setLeaveRequests(prev => prev.map(item => item.id === id ? saved : item)); }} onPeriodChange={async direction => { if (appSession.role === "admin" && (syncState === "dirty" || syncState === "saving")) { try { await saveCurrentMonth(); } catch { return; } } setCurrentMonth(prev => addMonths(prev, direction)); }} />
             ) : activeTab === "board" ? (
               <BulletinBoard onBack={goBack} periods={boardPeriods} isEditor={appSession.role === "admin"} visibility={storeMaster.leaveRequestBoardVisibility || "immediate"} correctionVisibility={correctionVisibility} operatorName={appSession.employeeName} onShiftPeriod={direction => setBoardAnchor(prev => addMonths(prev, direction))} onResolve={async item => { const saved = await updateLeaveRequestStatus(item.id, "対応済み"); setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.map(request => request.id === saved.id ? saved : request) }))); setHomeBoardRequests(prev => prev.map(request => request.id === saved.id ? saved : request)); }} />
             ) : activeTab === "mypage" ? (

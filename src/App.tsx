@@ -64,7 +64,7 @@ import { HomeView, sortEmployeesForDisplay } from "./components/HomeView";
 import { LeaveRequestView } from "./components/LeaveRequestView";
 import { LeaveRequestManager } from "./components/LeaveRequestManager";
 import { PersonalShiftList } from "./components/PersonalShiftList";
-import { cancelLeaveRequest, fetchLeaveRequests, fetchPaidLeaveBalance, savePaidLeaveBalance, submitLeaveRequest, updateLeaveRequestStatus, updateLeaveRequestWorkTime } from "./lib/leave-request-sync";
+import { cancelLeaveRequest, deleteLeaveRequest, fetchLeaveRequests, fetchPaidLeaveBalance, savePaidLeaveBalance, submitLeaveRequest, updateLeaveRequestStatus, updateLeaveRequestWorkTime } from "./lib/leave-request-sync";
 import { SpecialDaySettings } from "./components/SpecialDaySettings";
 import { fetchSpecialDayRules, saveSpecialDayRules } from "./lib/special-day-sync";
 import { buildDisplayRemarks, colorForRemark, DEFAULT_SPECIAL_DAY_RULES, findSpecialDayRule, withDefaultSpecialDayRules } from "./lib/special-day-utils";
@@ -734,13 +734,30 @@ export default function App() {
     try {
       const saved = await updateLeaveRequestStatus(request.id, status, rejectionReason);
       setLeaveRequests(prev => prev.map(item => item.id === saved.id ? saved : item));
-      if (status === "承認" && request.date) {
+      setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.map(item => item.id === saved.id ? saved : item) })));
+      setHomeBoardRequests(prev => prev.map(item => item.id === saved.id ? saved : item));
+      if (status === "承認" && request.status !== "承認" && request.date) {
         const shift: ShiftType | null = request.type === "有給希望" ? "有休" : request.type === "休み希望" ? "休み" : null;
         if (shift) handleShiftChange(employees.find(item => item.name === request.employeeName)?.id || "", request.date, shift);
       }
-      toast.success(status === "承認" ? "承認しました" : "却下しました");
+      toast.success(status === "申請中" ? "申請中に戻しました" : status === "承認" ? "承認しました" : "却下しました");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "状態を更新できませんでした");
+      throw error;
+    } finally { setLeaveRequestLoading(false); }
+  };
+
+  const handleLeaveRequestDelete = async (request: LeaveRequest) => {
+    setLeaveRequestLoading(true);
+    try {
+      await deleteLeaveRequest(request.id);
+      setLeaveRequests(prev => prev.filter(item => item.id !== request.id));
+      setBoardPeriods(prev => prev.map(period => ({ ...period, requests: period.requests.filter(item => item.id !== request.id) })));
+      setHomeBoardRequests(prev => prev.filter(item => item.id !== request.id));
+      toast.success("申請とお知らせを削除しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "申請を削除できませんでした");
+      throw error;
     } finally { setLeaveRequestLoading(false); }
   };
 
@@ -2053,7 +2070,7 @@ export default function App() {
                         {dashboardEmployees.map(employee => <option key={employee.id} value={employee.id}>{employee.displayName || employee.name}</option>)}
                       </select>
                     </div>}
-                    {isFromAdmin && <LeaveRequestManager requests={leaveRequests} loading={leaveRequestLoading} onStatusChange={handleLeaveRequestStatus} />}
+                    {isFromAdmin && <LeaveRequestManager requests={leaveRequests} loading={leaveRequestLoading} onStatusChange={handleLeaveRequestStatus} onDelete={handleLeaveRequestDelete} />}
                     <div className="dashboard-table-wrap overflow-x-auto">
                       <Table className="dashboard-table text-[13px]">
                         <TableHeader>

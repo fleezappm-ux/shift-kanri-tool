@@ -13,8 +13,8 @@ export function BulletinBoard({ periods, isEditor, visibility = "immediate", cor
   const canShow = (item: LeaveRequest) => {
     if (item.status === "取消") return false;
     const own = item.employeeName === operatorName;
+    if (item.status === "却下") return isEditor && !compact;
     if (item.type === "訂正依頼") return isEditor || own || correctionVisibility === "all";
-    if (item.status === "却下") return isEditor || own;
     if (item.commentVisibility === "editors" && !isEditor && !own) return false;
     if (visibility === "private") return isEditor || own;
     if (visibility === "after_approval") return isEditor || own || item.status === "承認";
@@ -23,9 +23,10 @@ export function BulletinBoard({ periods, isEditor, visibility = "immediate", cor
   const visiblePeriods = compact ? periods.slice(0, 1) : periods.slice(0, 3);
   const corrections = visiblePeriods.flatMap(period => period.requests.filter(item => item.type === "訂正依頼" && item.status === "申請中" && canShow(item)));
   const renderItem = (item: LeaveRequest) => <article key={item.id} className={`rounded-xl border p-3 text-sm ${item.type === "訂正依頼" && item.status === "申請中" ? "border-red-300 bg-red-50" : "border-amber-100 bg-amber-50"}`}>
-    <div className="flex flex-wrap items-center gap-2"><strong>{item.employeeName}</strong><span>{item.date ? format(new Date(`${item.date}T00:00:00`), "M/d（E）", { locale: ja }) : "この期間"}</span><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${item.type === "訂正依頼" ? "bg-red-200 text-red-800" : "bg-amber-100 text-amber-800"}`}>{item.type}{item.status === "対応済み" ? "・対応済み" : ""}</span></div>
+    <div className="flex flex-wrap items-center gap-2"><strong>{item.employeeName}</strong><span>{item.date ? format(new Date(`${item.date}T00:00:00`), "M/d（E）", { locale: ja }) : "この期間"}</span><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${item.type === "訂正依頼" ? "bg-red-200 text-red-800" : "bg-amber-100 text-amber-800"}`}>{item.type}</span>{item.status !== "申請中" && <span className={`text-xs font-bold ${item.status === "却下" ? "text-red-700" : "text-green-700"}`}>{item.status === "承認" ? "承認されました" : item.status === "却下" ? "却下されました" : "対応済み"}</span>}</div>
     {item.comment && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-700">{item.comment}{isEditor && item.commentVisibility === "editors" ? "（編集者のみ）" : ""}</p>}
     {item.type === "出勤希望" && item.desiredWorkStart && item.desiredWorkEnd && <p className="mt-1 text-xs">{item.desiredWorkStart}〜{item.desiredWorkEnd}</p>}
+    {item.status === "却下" && item.rejectionReason && <p className="mt-1 text-xs text-red-700">却下理由：{item.rejectionReason}</p>}
     {item.type === "訂正依頼" && item.status === "申請中" && isEditor && onResolve && <button type="button" disabled={resolving === item.id} className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-bold text-red-700" onClick={async () => { setResolving(item.id); try { await onResolve(item); } finally { setResolving(null); } }}>対応済みにする</button>}
   </article>;
   if (compact) {

@@ -6,9 +6,9 @@ import { LeaveRequest } from "../types";
 
 export type BoardVisibility = "immediate" | "after_approval" | "private";
 export interface BoardPeriod { label: string; locked: boolean; requests: LeaveRequest[]; }
-interface Props { periods: BoardPeriod[]; isEditor: boolean; visibility?: BoardVisibility; correctionVisibility?: "all" | "private"; operatorName?: string; compact?: boolean; onResolve?: (request: LeaveRequest) => Promise<void>; onShiftPeriod?: (direction: number) => void; onOpenBoard?: () => void; }
+interface Props { periods: BoardPeriod[]; isEditor: boolean; visibility?: BoardVisibility; correctionVisibility?: "all" | "private"; operatorName?: string; compact?: boolean; onResolve?: (request: LeaveRequest) => Promise<void>; onShiftPeriod?: (direction: number) => void; onOpenBoard?: () => void; onBack?: () => void; }
 
-export function BulletinBoard({ periods, isEditor, visibility = "immediate", correctionVisibility = "private", operatorName, compact = false, onResolve, onShiftPeriod, onOpenBoard }: Props) {
+export function BulletinBoard({ periods, isEditor, visibility = "immediate", correctionVisibility = "private", operatorName, compact = false, onResolve, onShiftPeriod, onOpenBoard, onBack }: Props) {
   const [resolving, setResolving] = useState<string | null>(null);
   const canShow = (item: LeaveRequest) => {
     if (item.status === "取消") return false;
@@ -46,7 +46,7 @@ export function BulletinBoard({ periods, isEditor, visibility = "immediate", cor
     </section>;
   }
   return <section className="bulletin-board-page space-y-4">
-    <header className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm"><h1 className="flex items-center gap-2 text-xl font-black"><MessageSquareText className="h-6 w-6 text-amber-600" />お知らせ掲示板</h1>{!compact && <p className="mt-1 text-xs text-slate-500">選んだ期間から3期間分のお知らせ</p>}</header>
+    <header className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm"><div className="flex items-start justify-between gap-2"><h1 className={`flex items-center gap-2 text-xl font-black ${isEditor ? "text-red-700" : "text-slate-900"}`}><MessageSquareText className="h-6 w-6 text-amber-600" />{isEditor ? "お知らせ掲示板管理者" : "お知らせ掲示板"}</h1>{onBack && <button type="button" onClick={onBack} className="shrink-0 rounded-lg px-2 py-1 text-sm font-bold text-slate-700 hover:bg-amber-100">← 戻る</button>}</div><p className="mt-1 text-xs text-slate-500">選んだ期間から3期間分のお知らせ</p></header>
     {!compact && <nav className="flex items-center justify-between rounded-xl border bg-white p-3" aria-label="掲示板の表示期間"><button onClick={() => onShiftPeriod?.(-1)}>‹ 前の期間</button><strong>{visiblePeriods[0]?.label || "期間未設定"}から3期間</strong><button onClick={() => onShiftPeriod?.(1)}>次の期間 ›</button></nav>}
     {corrections.length > 0 && <section className="space-y-2"><h2 className="font-black text-red-700">未対応の訂正依頼</h2>{corrections.map(renderItem)}</section>}
     {visiblePeriods.map(period => { const visible = period.requests.filter(canShow).filter(item => !(item.type === "訂正依頼" && item.status === "申請中")); return <section key={period.label} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex items-center justify-between gap-3 border-b pb-3"><strong className="text-base font-black">{period.label}</strong><span className={`rounded-full px-2 py-1 text-[10px] font-black ${period.locked ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>{period.locked ? "確定" : "希望受付中"}</span></div><div className="mt-3 space-y-2">{visible.length ? visible.map(renderItem) : <p className="py-5 text-center text-sm text-slate-400">現在お知らせはありません</p>}</div></section>; })}

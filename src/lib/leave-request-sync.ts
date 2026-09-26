@@ -57,6 +57,10 @@ export async function updateLeaveRequestStatus(id: string, status: LeaveRequestS
   return json.request as LeaveRequest;
 }
 
+export async function deleteLeaveRequest(id: string): Promise<void> {
+  await request("deleteShiftLeaveRequest", { shiftApiKey: getManagementApiKey(), id }, true);
+}
+
 export async function updateLeaveRequestWorkTime(id: string, desiredWorkStart: string, desiredWorkEnd: string): Promise<LeaveRequest> {
   const json = await request("updateShiftLeaveRequestWorkTime", { employeeToken: getEmployeeToken(), id, desiredWorkStart, desiredWorkEnd });
   return json.request as LeaveRequest;

@@ -372,7 +372,6 @@ export default function App() {
       const current = await requestsFor(range[0], range[range.length - 1]);
       if (cancelled) return;
       setHomeBoardRequests(current);
-      if (appSession.role !== "admin") { setHomePendingCorrections([]); return; }
       const earlier = await Promise.all([-2, -1].map(offset => {
         const anchor = addMonths(homeBoardMonth, offset);
         const dates = generateConfiguredDateRange(anchor.getFullYear(), anchor.getMonth() + 1, calendarPeriodSettings.startDay, calendarPeriodSettings.endDay);

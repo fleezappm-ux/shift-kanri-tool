@@ -2,7 +2,7 @@
 // 一度選んだら覚えておく仕組みです（毎回の保存ダイアログを避けるため）。
 // 対応していないブラウザ（Safari/Firefox等）では、従来通りのダウンロード方式にフォールバックします。
 
-const DB_NAME = "shift-kanri-tool-fs";
+const DB_NAME = `shift-tool-fs:${import.meta.env?.BASE_URL ?? "/"}`;
 const STORE_NAME = "handles";
 const KEY = "excel-output-dir";
 

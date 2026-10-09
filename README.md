@@ -1,20 +1,58 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# シフト管理ツール（配布用テンプレート）
 
-# Run and deploy your AI Studio app
+薬局など小さな店舗向けの、シフト作成・希望提出・お知らせ共有ツールです。画面は GitHub Pages、サーバーは Google Apps Script（GAS）、データは Googleスプレッドシート に置きます。実運用の従業員・シフト・認証情報は含みません。
 
-This contains everything you need to run your app locally.
+## できること
 
-View your app in AI Studio: https://ai.studio/apps/1e96afc1-32ca-40b2-a4be-bafb9f6a024e
+- シフト表の作成（自動保存）・確定、案／確定の色分け、CSV・Excel出力
+- 従業員の休み・出勤・有給希望の提出、管理者の承認・却下（休み・有休は承認でシフトへ自動反映）
+- 確定後の変更を依頼する「訂正依頼」
+- お知らせ掲示板（確認・履歴つき）、管理者からのお知らせ
+- 勤務時間・勤務パターン・定休日／祝日の設定、シフト案の自動作成
+- 反応が速い操作（押すとすぐ反映、保存は裏で）。保存に失敗したときは赤い警告を出して自動で再試行
 
-## Run Locally
+## 使い始めるには
 
-**Prerequisites:**  Node.js
+**[導入手順書](docs/setup-guide.md)** にそって進めてください（チェックリスト式・約60〜90分）。
+ログインや設定の途中でつまずいたら、GASで `checkShiftSetup` を実行すると、設定の抜けを一覧で診断します。
 
+アプリ内の「使い方」に、操作の説明があります。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 仕組み
+
+| 部分 | 役割 | 置き場所 |
+| --- | --- | --- |
+| 画面（React + Vite） | 従業員・管理者が使う画面 | `src/` → GitHub Pages |
+| サーバー（GAS） | ログイン確認、スプレッドシートへの保存・読み込み | `gas/Code.gs` |
+| データ（スプレッドシート） | シフト、休み希望、設定 | 「シフト」「休み希望」「設定」の3枚のシート |
+
+- GASのURLはブラウザの通信先として見えるため、認証情報として扱わないでください。**必ず店舗ごとに、スプレッドシートをコピーして使います。**
+- ログインは、共通のID・パスワードを入れ、操作員（自分の名前）を選び、**操作員ごとのPIN（4〜6桁の数字）**を入れる方式です。PINは本人だけが知る番号で、ほかの従業員から見られなくするためのものです（管理者やスプレッドシート・GASを開ける人は、データそのものを見られます）。
+- 管理者用の接続キー（`SHIFT_API_KEY`）は、管理者の端末に1回入れます。GitHubやチャットには書かないでください。
+
+## 見張り役（自動チェック）
+
+- **CI**（`.github/workflows/ci.yml`）：変更を取り込む前に、型チェック・テスト・ビルドを自動で確認
+- **Health check**（`.github/workflows/health-check.yml`）：6時間ごとに公開サイトとGASの生死を確認。止まるとGitHubから通知メール
+- **エラー記録**：画面で起きたエラーを自動で記録。管理者は 設定 → その他設定 で見られる
+- **GASの自己診断**：`checkShiftSetup`（導入の設定確認）
+
+## 開発者向け
+
+```bash
+cp .env.example .env.local   # VITE_SHIFT_GAS_URL に自分のGASのURLを入れる
+npm ci
+npm run dev                  # http://localhost:3000
+npm run lint                 # 型チェック
+npm run test:worktime        # 勤務時間・保存待ち行列・エラー記録などのテスト
+npm run test:reset           # データ初期化の安全装置のテスト
+```
+
+- GitHub Pagesへの公開は、`main` への取り込みで自動実行されます（`VITE_SHIFT_GAS_URL` が未設定だと失敗し、誤った接続先の公開を防ぎます）。サブパスは `VITE_BASE_PATH`（標準 `/pharmacy-shift-template/`）。
+- `gas/Code.gs` を直したら、**GASにも貼り直して「新バージョン」で再デプロイ**が必要です（GitHubへの反映だけでは、サーバー側は変わりません）。
+
+## 既知の制限
+
+- 従業員は最大50人まで。従業員マスタは1つのScript Property（上限約9KB）に保存しているため、約45人前後で容量が近づきます。大きな店舗や多店舗へ広げる前に、保存先の変更が必要です。
+- 時間のかかる処理は、GAS・スプレッドシートの応答速度に左右されます（開く操作は端末内の保存で即表示し、裏で最新化します）。
+- 有給の残日数は「目安の参考値」です。正式な管理は、会社の記録で行ってください。

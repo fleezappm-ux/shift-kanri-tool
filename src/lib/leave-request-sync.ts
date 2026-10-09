@@ -1,13 +1,14 @@
+import { gasFetch } from "./gas-fetch";
+import { templateStorage } from "./template-storage";
 import { CommentVisibility, LeaveRequest, LeaveRequestStatus, LeaveRequestType, PaidLeaveBalance } from "../types";
 import { getEmployeeToken, getManagementApiKey, getShiftSession } from "./auth-sync";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
 const SHIFT_API_KEY_STORAGE = "shift_api_key";
 
 async function request(action: string, payload: Record<string, unknown>, requireKey = false) {
-  const shiftApiKey = localStorage.getItem(SHIFT_API_KEY_STORAGE) || "";
-  if (requireKey && !shiftApiKey) throw new Error("管理者用GAS接続キーが未設定です");
-  const response = await fetch(GAS_URL, {
+  const shiftApiKey = templateStorage.getItem(SHIFT_API_KEY_STORAGE) || "";
+  if (requireKey && !shiftApiKey) throw new Error("管理者用の接続キーが未設定です");
+  const response = await gasFetch({
     method: "POST",
     headers: { "Content-Type": "text/plain" },
     body: JSON.stringify({ action, sessionToken: getShiftSession()?.token || "", shiftApiKey, ...payload })
@@ -32,6 +33,8 @@ export async function submitLeaveRequest(input: {
   type: LeaveRequestType;
   comment: string;
   commentVisibility: CommentVisibility;
+  desiredWorkStart?: string;
+  desiredWorkEnd?: string;
 }): Promise<LeaveRequest> {
   const json = await request("saveShiftLeaveRequest", { employeeToken: getEmployeeToken(), request: input });
   return json.request as LeaveRequest;

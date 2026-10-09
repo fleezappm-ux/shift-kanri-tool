@@ -1,15 +1,16 @@
+import { gasFetch } from "./gas-fetch";
+import { templateStorage } from "./template-storage";
 import { getShiftSession } from "./auth-sync";
 
 export type BoardVisibility = "immediate" | "after_approval" | "private";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzS1F43nO_ZDG6X6gH4qfUeprWmFFOZuthQKjbXxuxkoTWY0QMvbAfURd2speGZEa6x/exec";
 const SHIFT_API_KEY_STORAGE = "shift_api_key";
 
 async function call(action: string, extra: Record<string, unknown> = {}) {
-  const response = await fetch(GAS_URL, {
+  const response = await gasFetch({
     method: "POST",
     headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ action, sessionToken: getShiftSession()?.token || "", shiftApiKey: localStorage.getItem(SHIFT_API_KEY_STORAGE) || "", ...extra })
+    body: JSON.stringify({ action, sessionToken: getShiftSession()?.token || "", shiftApiKey: templateStorage.getItem(SHIFT_API_KEY_STORAGE) || "", ...extra })
   });
   if (!response.ok) throw new Error(`通信に失敗しました（${response.status}）`);
   const json = await response.json();
@@ -36,4 +37,14 @@ export async function fetchCorrectionVisibility(): Promise<"all" | "private"> {
 export async function saveCorrectionVisibility(visibility: "all" | "private"): Promise<"all" | "private"> {
   const json = await call("saveShiftCorrectionVisibility", { visibility });
   return json.visibility === "all" ? "all" : "private";
+}
+
+export interface SharedStoreSettings { storeName: string; showStoreNameOnHome: boolean }
+export async function fetchStoreSettings(): Promise<SharedStoreSettings> {
+  const json = await call("getShiftStoreSettings");
+  return { storeName: String(json.settings?.storeName || ""), showStoreNameOnHome: json.settings?.showStoreNameOnHome === true };
+}
+export async function saveStoreSettings(settings: SharedStoreSettings): Promise<SharedStoreSettings> {
+  const json = await call("saveShiftStoreSettings", { settings });
+  return { storeName: String(json.settings?.storeName || ""), showStoreNameOnHome: json.settings?.showStoreNameOnHome === true };
 }

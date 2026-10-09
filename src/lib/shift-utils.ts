@@ -2,7 +2,7 @@
 import { ShiftType } from "../types";
 import { CyclePatterns } from "../constants";
 
-/** cyclePatterns（管理画面で編集可能なクール内容）から、指定した曜日・週の予定シフトを返します。 */
+/** cyclePatterns（管理画面で編集可能な勤務パターン内容）から、指定した曜日・週の予定シフトを返します。 */
 export function resolveCycleShift(
   patterns: CyclePatterns,
   cycleType: number,
@@ -91,7 +91,7 @@ export function finalizeShiftText(text: string): string {
 /**
  * シフト文字列から拘束時間を計算し、休憩時間と実働時間を返す
  */
-export function calculateTimes(shiftInput: string): { breakTime: string; workTime: string } {
+export function calculateTimes(shiftInput: string, customBreak?: string): { breakTime: string; workTime: string } {
   if (!shiftInput || shiftInput === "有休" || shiftInput === "休み" || shiftInput === "任意入力") {
     return { breakTime: "0:00", workTime: "0:00" };
   }
@@ -126,9 +126,14 @@ export function calculateTimes(shiftInput: string): { breakTime: string; workTim
     const endMinutes = parseTime(endStr);
     
     let durationMinutes = endMinutes - startMinutes;
-    if (durationMinutes < 0) durationMinutes += 24 * 60; // 日をまたぐ場合
+    if (durationMinutes <= 0) durationMinutes += 24 * 60; // 日をまたぐ場合
 
-    const breakMinutes = durationMinutes > 6 * 60 ? 60 : 0;
+    let breakMinutes = durationMinutes > 6 * 60 ? 60 : 0;
+    if (customBreak !== undefined) {
+      const [bh, bm] = customBreak.replace(/[^0-9:]/g, "").split(":");
+      const parsed = (parseInt(bh) || 0) * 60 + (parseInt(bm) || 0);
+      breakMinutes = Math.min(parsed, durationMinutes);
+    }
     const workMinutes = durationMinutes - breakMinutes;
 
     return {
@@ -146,27 +151,6 @@ function formatMinutes(minutes: number): string {
   return `${h}:${m.toString().padStart(2, "0")}`;
 }
 
-/**
- * 指定された年月の21日から翌月20日までの日付リストを生成する
- */
-export function generateDateRange(year: number, month: number): Date[] {
-  const dates: Date[] = [];
-  const start = new Date(year, month - 1, 21);
-  
-  for (let i = 0; i < 32; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    
-    // 翌月の20日を超えたら終了
-    if (d.getMonth() === (month % 12) && d.getDate() > 20) break;
-    // 年をまたぐ場合の考慮
-    if (month === 12 && d.getMonth() === 0 && d.getDate() > 20) break;
-
-    dates.push(d);
-  }
-  
-  return dates;
-}
 
 /** 店舗ごとの開始日・終了日から、開始月を基準にシフト期間を生成します。 */
 export function generateConfiguredDateRange(year: number, month: number, startDay: number, endDay: number): Date[] {

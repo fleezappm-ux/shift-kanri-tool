@@ -1,35 +1,20 @@
-import { ReactNode, useState } from "react";
+import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CalendarPeriodSettings } from "../lib/calendar-period-sync";
-import { SpecialDayColor } from "../types";
+import { SaveStatus } from "./SaveStatus";
+import { useUnsavedGuard } from "../lib/unsaved";
 
 export interface StoreMaster {
   storeName: string;
+  showStoreNameOnHome: boolean;
   leaveRequestBoardVisibility: "immediate" | "after_approval" | "private";
-  businessDays: number[];
-  useJapaneseHolidays: boolean;
-  yearEndEnabled: boolean;
-  yearEndStart: string;
-  yearEndEnd: string;
-  obonEnabled: boolean;
-  obonStart: string;
-  obonEnd: string;
-  holidayBandEnabled: boolean;
-  holidayColor: SpecialDayColor;
-  yearEndBandEnabled: boolean;
-  yearEndColor: SpecialDayColor;
-  obonBandEnabled: boolean;
-  obonColor: SpecialDayColor;
 }
 
 export const DEFAULT_STORE_MASTER: StoreMaster = {
-  storeName: "あおい薬局", leaveRequestBoardVisibility: "immediate", businessDays: [1, 2, 3, 4, 5, 6], useJapaneseHolidays: true,
-  yearEndEnabled: true, yearEndStart: "12-31", yearEndEnd: "01-03",
-  obonEnabled: true, obonStart: "08-13", obonEnd: "08-15",
-  holidayBandEnabled: true, holidayColor: "red", yearEndBandEnabled: true, yearEndColor: "red", obonBandEnabled: true, obonColor: "red"
+  storeName: "", showStoreNameOnHome: false, leaveRequestBoardVisibility: "immediate"
 };
 
 interface Props {
@@ -39,8 +24,9 @@ interface Props {
   periodDraft: CalendarPeriodSettings;
   saving: boolean;
   onPeriodDraftChange: (settings: CalendarPeriodSettings) => void;
-  onSavePeriod: () => Promise<void>;
-  onSaveBoardVisibility: (visibility: StoreMaster["leaveRequestBoardVisibility"]) => Promise<void>;
+  onSavePeriod: () => Promise<boolean>;
+  onSaveStore: (settings: { storeName: string; showStoreNameOnHome: boolean }) => Promise<void>;
+  onOpenBandSettings: () => void;
 }
 
 const panel = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -48,56 +34,51 @@ const heading = "text-sm font-bold text-slate-900";
 const description = "mt-1 text-xs leading-5 text-slate-500";
 const field = "h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-export function StoreMasterSettings({ master, onMasterChange, period, periodDraft, saving, onPeriodDraftChange, onSavePeriod, onSaveBoardVisibility }: Props) {
+export function StoreMasterSettings({ master, onMasterChange, period, periodDraft, saving, onPeriodDraftChange, onSavePeriod, onSaveStore, onOpenBandSettings }: Props) {
   const [draft, setDraft] = useState(master);
-  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  useEffect(() => setDraft(master), [master.storeName, master.showStoreNameOnHome]);
+  const shownName = (value: string) => value === "店舗名を設定" || value === "薬局名を設定" ? "" : value;
+  const dirty = shownName(draft.storeName).trim() !== shownName(master.storeName).trim() || draft.showStoreNameOnHome !== master.showStoreNameOnHome || period.startDay !== periodDraft.startDay || period.endDay !== periodDraft.endDay;
+  useUnsavedGuard("store-master", dirty);
+  const [busy, setBusy] = useState(false);
   const save = async () => {
-    onMasterChange(draft);
-    localStorage.setItem("store_master_settings", JSON.stringify(draft));
-    if (period.startDay !== periodDraft.startDay || period.endDay !== periodDraft.endDay) await onSavePeriod();
-    toast.success("店舗マスターを保存しました");
+    setBusy(true);
+    try { await doSave(); } finally { setBusy(false); }
+  };
+  const doSave = async () => {
+    try {
+      await onSaveStore({ storeName: draft.storeName.trim(), showStoreNameOnHome: draft.showStoreNameOnHome });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "店舗名を保存できませんでした");
+      return;
+    }
+    if (period.startDay !== periodDraft.startDay || period.endDay !== periodDraft.endDay) {
+      if (!await onSavePeriod()) { toast.error("店舗名は保存しましたが、集計期間は保存できませんでした"); return; }
+    }
+    toast.success("店舗マスタを保存しました（全員の画面に反映されます）");
   };
 
   return <section className="space-y-4 font-sans text-slate-900">
     <div className={panel}>
-      <label className={heading}>店舗名</label><p className={description}>シフト画面で使用する店舗名です。</p>
-      <Input className="mt-3 h-11 rounded-xl text-sm" value={draft.storeName} onChange={event => setDraft(current => ({ ...current, storeName: event.target.value }))} />
+      <label className={heading}>店舗名</label><p className={description}>店舗名を入れてください。</p>
+      <Input className="mt-3 h-11 rounded-xl text-sm" placeholder="店舗名を入れてください" value={draft.storeName === "店舗名を設定" || draft.storeName === "薬局名を設定" ? "" : draft.storeName} onChange={event => setDraft(current => ({ ...current, storeName: event.target.value }))} />
+      <label className="mt-4 flex items-center gap-3 text-sm font-bold"><input type="checkbox" className="h-5 w-5" checked={draft.showStoreNameOnHome} onChange={event => setDraft(current => ({ ...current, showStoreNameOnHome: event.target.checked }))} />店舗名＋シフトをホームに表示</label>
+      <p className={description}>OFFならホームの見出しは「シフト」です。店舗名が空欄の場合も「シフト」になります。</p>
     </div>
     <div className={panel}>
-      <h4 className={heading}>シフトの集計期間</h4><p className={description}>シフトを1か月分として扱う開始日を選びます。終了日は自動で決まり、画面表示とCSV・Excelの出力期間も同じになります。</p>
+      <h4 className={heading}>シフト表の月の区切り</h4><p className={description}>シフト表を「毎月何日から何日まで」で1か月分とするか選びます。給料の締め日に合わせるお店が多いです。例：毎月1日 → 月末まで／毎月21日 → 翌月20日まで。終了日は自動で決まり、画面・CSV・Excelも同じ期間になります。</p>
       <div className="mt-4 grid items-end gap-3 sm:grid-cols-[1fr_auto_1fr]">
-        <label><span className="mb-2 block text-xs font-bold text-slate-600">開始日</span><select className={field} value={periodDraft.startDay} onChange={event => { const startDay = Number(event.target.value); onPeriodDraftChange({ startDay, endDay: startDay === 1 ? 0 : startDay - 1 }); }}>{Array.from({ length: 28 }, (_, index) => index + 1).map(day => <option key={day} value={day}>毎月{day}日</option>)}</select></label>
+        <label><span className="mb-2 block text-xs font-bold text-slate-600">この日から始める</span><select className={field} value={periodDraft.startDay} onChange={event => { const startDay = Number(event.target.value); onPeriodDraftChange({ startDay, endDay: startDay === 1 ? 0 : startDay - 1 }); }}>{Array.from({ length: 28 }, (_, index) => index + 1).map(day => <option key={day} value={day}>毎月{day}日</option>)}</select></label>
         <span className="pb-3 text-center text-sm font-bold text-blue-600">→</span>
-        <label><span className="mb-2 block text-xs font-bold text-slate-600">終了日（自動）</span><div className={`${field} flex items-center bg-slate-50`}>{periodDraft.endDay === 0 ? "同月末日" : `翌月${periodDraft.endDay}日`}</div></label>
+        <label><span className="mb-2 block text-xs font-bold text-slate-600">終わりの日（自動で決まります）</span><div className={`${field} flex items-center bg-slate-50`}>{periodDraft.endDay === 0 ? "同月末日" : `翌月${periodDraft.endDay}日`}</div></label>
       </div>
     </div>
     <div className={panel}>
-      <h4 className={heading}>通常の営業曜日</h4><p className={description}>青は「営業日」、灰色は「休み」です。曜日を押すと切り替わります。</p>
-      <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-7">{weekdays.map((day, index) => { const open = draft.businessDays.includes(index); return <label key={day} className={`flex h-14 cursor-pointer flex-col items-center justify-center rounded-xl border text-sm font-bold transition ${open ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}><input type="checkbox" className="sr-only" checked={open} onChange={event => setDraft(current => ({ ...current, businessDays: event.target.checked ? [...current.businessDays, index].sort() : current.businessDays.filter(value => value !== index) }))} /><span>{day}</span><small className="mt-0.5 text-[10px] font-bold">{open ? "営業" : "休み"}</small></label>; })}</div>
+      <h4 className={heading}>お店のお休みの日</h4><p className={description}>お店が休みの日（日曜、祝日、年末年始、毎月○日など）を決めます。休みの日はカレンダーに色が付いて、シフト案の自動作成でも休みとして扱えます。「お休みなし」でもOKです。</p>
+      <Button variant="outline" className="mt-3" onClick={onOpenBandSettings}>お店のお休みの日を決める →</Button>
+      <p className={description}>※ここで変更中の内容は、先に下の「店舗マスタを保存」を押してから移動してください。</p>
     </div>
-    <HolidayBox title="国民の祝日" descriptionText="カレンダーから毎年自動取得します。" enabled={draft.useJapaneseHolidays} bandEnabled={draft.holidayBandEnabled} color={draft.holidayColor} onEnabled={value => setDraft(current => ({ ...current, useJapaneseHolidays: value }))} onBand={value => setDraft(current => ({ ...current, holidayBandEnabled: value }))} onColor={value => setDraft(current => ({ ...current, holidayColor: value }))} />
-    <HolidayBox title="年末年始" descriptionText="毎年同じ月日を全員休みとして扱います。" enabled={draft.yearEndEnabled} bandEnabled={draft.yearEndBandEnabled} color={draft.yearEndColor} onEnabled={value => setDraft(current => ({ ...current, yearEndEnabled: value }))} onBand={value => setDraft(current => ({ ...current, yearEndBandEnabled: value }))} onColor={value => setDraft(current => ({ ...current, yearEndColor: value }))}><DateRange start={draft.yearEndStart} end={draft.yearEndEnd} onStart={value => setDraft(current => ({ ...current, yearEndStart: value }))} onEnd={value => setDraft(current => ({ ...current, yearEndEnd: value }))} /></HolidayBox>
-    <HolidayBox title="お盆" descriptionText="毎年同じ月日を全員休みとして扱います。" enabled={draft.obonEnabled} bandEnabled={draft.obonBandEnabled} color={draft.obonColor} onEnabled={value => setDraft(current => ({ ...current, obonEnabled: value }))} onBand={value => setDraft(current => ({ ...current, obonBandEnabled: value }))} onColor={value => setDraft(current => ({ ...current, obonColor: value }))}><DateRange start={draft.obonStart} end={draft.obonEnd} onStart={value => setDraft(current => ({ ...current, obonStart: value }))} onEnd={value => setDraft(current => ({ ...current, obonEnd: value }))} /></HolidayBox>
-    <p className="rounded-xl bg-slate-50 p-4 text-xs leading-5 text-slate-600">年末年始・お盆は毎年同じ月日を使用します。年ごとに変わる当番薬局・当番医・臨時休業日は「特殊日設定」で登録します。</p>
-    <Button className="h-11 w-full font-bold" disabled={saving || !draft.storeName.trim()} onClick={() => void save()}><Save className="mr-2 h-4 w-4" />店舗マスターを保存</Button>
+    <SaveStatus dirty={dirty} saving={busy || saving} />
+    <div className={(dirty || busy || saving) ? "h-20 md:hidden" : "hidden"} /><Button className={`fixed inset-x-4 bottom-[76px] z-40 h-12 font-bold shadow-xl md:sticky md:inset-x-auto md:bottom-2 md:z-10 md:w-full ${(dirty || busy || saving) ? "" : "max-md:hidden"}`} disabled={saving || busy || !dirty} onClick={() => void save()}><Save className="mr-2 h-4 w-4" />{busy ? "保存中…" : "店舗マスタを保存"}</Button>
   </section>;
-}
-
-const COLORS: { value: SpecialDayColor; label: string }[] = [
-  { value: "red", label: "赤" }, { value: "blue", label: "青" }, { value: "green", label: "緑" },
-  { value: "amber", label: "黄" }, { value: "purple", label: "紫" }, { value: "gray", label: "灰" }
-];
-
-function HolidayBox({ title, descriptionText, enabled, bandEnabled, color, onEnabled, onBand, onColor, children }: { title: string; descriptionText: string; enabled: boolean; bandEnabled: boolean; color: SpecialDayColor; onEnabled: (value: boolean) => void; onBand: (value: boolean) => void; onColor: (value: SpecialDayColor) => void; children?: ReactNode }) {
-  return <div className={panel}>
-    <div className="grid items-center gap-4 lg:grid-cols-[1fr_auto_auto]">
-      <div><label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={enabled} onChange={event => onEnabled(event.target.checked)} />{title}を使用する</label><p className={description}>{descriptionText}</p>{children}</div>
-      <div><span className="mb-2 block text-xs font-bold text-slate-600">帯色</span><div className="flex rounded-xl bg-slate-100 p-1"><button type="button" className={`rounded-lg px-4 py-2 text-xs font-bold ${bandEnabled ? "bg-blue-600 text-white shadow-sm" : "text-slate-500"}`} onClick={() => onBand(true)}>ON</button><button type="button" className={`rounded-lg px-4 py-2 text-xs font-bold ${!bandEnabled ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`} onClick={() => onBand(false)}>OFF</button></div></div>
-      <label><span className="mb-2 block text-xs font-bold text-slate-600">色</span><select className="h-10 min-w-28 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold disabled:opacity-40" value={color} disabled={!bandEnabled} onChange={event => onColor(event.target.value as SpecialDayColor)}>{COLORS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-    </div>
-  </div>;
-}
-
-function DateRange({ start, end, onStart, onEnd }: { start: string; end: string; onStart: (value: string) => void; onEnd: (value: string) => void }) {
-  return <div className="mt-3 flex max-w-xs items-center gap-2"><input type="text" inputMode="numeric" className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm font-semibold" value={start} onChange={event => onStart(event.target.value)} placeholder="12-31" /><span className="text-sm text-slate-500">〜</span><input type="text" inputMode="numeric" className="h-10 min-w-0 flex-1 rounded-xl border border-slate-300 px-3 text-sm font-semibold" value={end} onChange={event => onEnd(event.target.value)} placeholder="01-03" /></div>;
 }

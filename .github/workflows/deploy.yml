@@ -29,8 +29,8 @@ jobs:
       - run: npm run test:reset
       - run: npm run build
         env:
-          # お店の接続先は画面で入力する方式のため、ここには埋め込まない
-          VITE_SHIFT_GAS_URL: ""
+          # あおい薬局のウェブアプリURL（従業員はURLを開くだけで使える）
+          VITE_SHIFT_GAS_URL: "https://script.google.com/macros/s/AKfycbyUHRu4OzQj8VBNgdnlKHeIU3LXt4JSv-pPNc0eaRJ99E8n_eSXU77sjzqLRLJAeA6B2g/exec"
           # リポジトリ名を変えて複製しても、公開サイトが真っ白にならないように、公開先の名前から自動で決める
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
       - uses: actions/upload-pages-artifact@v4

@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { ArrowRight, BookOpen, CalendarDays, ChevronLeft, ChevronRight, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 import { Employee, GlobalRemark, LeaveRequest } from "../types";
-import { HomeLayout, ShiftRole } from "../lib/employee-master-sync";
+import { HomeLayout, ShiftRole, isPresentInDates } from "../lib/employee-master-sync";
 import { WorkforceHeatmap } from "./WorkforceHeatmap";
 import { Button } from "@/components/ui/button";
 import { BulletinBoard } from "./BulletinBoard";
@@ -63,7 +63,9 @@ export function HomeView({
   operatorName, onLogout, onOpenGuide, requests, pendingCorrections, boardMonthLabel, boardLocked, boardVisibility, correctionVisibility, isEditor, onOpenBoard, notices
 }: HomeViewProps) {
   const [showLogout, setShowLogout] = useState(false);
-  const orderedEmployees = sortEmployeesForDisplay(employees);
+  // 在籍期間が決まっている人は、いま見ている週に在籍するときだけ出す
+  const weekKeys = weekDates.map(date => format(date, "yyyy-MM-dd"));
+  const orderedEmployees = sortEmployeesForDisplay(employees).filter(item => isPresentInDates(item, weekKeys));
   const selectedDateObject = new Date(`${selectedDate}T00:00:00`);
   const selectedRemark = remarks.find(item => item.date === selectedDate);
   const workingCount = orderedEmployees.filter(employee => {

@@ -94,7 +94,7 @@ import { ToolHelp } from "./components/ToolHelp";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { SaveStatus } from "./components/SaveStatus";
 import { useUnsavedGuard } from "./lib/unsaved";
-import { EmployeeMasterItem, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster, DEFAULT_HOME_LAYOUT, DEFAULT_ROLES, fetchShiftRoles, fetchHomeLayout, saveShiftRoles, saveHomeLayout, ShiftRole, HomeLayout } from "./lib/employee-master-sync";
+import { EmployeeMasterItem, isPresentInDates, isPresentOnDate, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster, DEFAULT_HOME_LAYOUT, DEFAULT_ROLES, fetchShiftRoles, fetchHomeLayout, saveShiftRoles, saveHomeLayout, ShiftRole, HomeLayout } from "./lib/employee-master-sync";
 import { fetchCycleMaster, saveCycleMaster } from "./lib/cycle-master-sync";
 import { BoardPeriod, BulletinBoard } from "./components/BulletinBoard";
 import { MyPage } from "./components/MyPage";
@@ -957,7 +957,9 @@ export default function App() {
     })).values()
   );
   const outputPeriods = activeTab === "home" ? homeOutputPeriods : [dateRange];
-  const dashboardEmployees = sortEmployeesForDisplay(employees);
+  // 在籍期間（いつからいつまで）が決まっている人は、その期間に1日でも在籍するときだけ表に出す
+  const dateRangeKeys = dateRange.map(date => format(date, "yyyy-MM-dd"));
+  const dashboardEmployees = sortEmployeesForDisplay(employees).filter(item => isPresentInDates(item, dateRangeKeys));
   const staffingWarnings = hasAnyStaffingRule(staffingRules)
     ? checkStaffing({ dates: dateRange, employees: dashboardEmployees, rules: staffingRules, roleNames: Object.fromEntries(roles.map(role => [role.id, role.name])), specialDayRules })
     : null;
@@ -1048,6 +1050,7 @@ export default function App() {
       const shifts = [...employee.shifts];
       allDates.forEach(date => {
         const key = getDateStr(date);
+        if (!isPresentOnDate(employee, key)) return;
         const existingIndex = shifts.findIndex(item => item.date.slice(0, 10) === key);
         if (existingIndex >= 0 && (!overwrite || approvedLeave.has(`${employee.id}|${key}`) || approvedLeave.has(`${employee.name}|${key}`))) return;
         const weekIndex = cycleWeekIndex(date, assignment);
@@ -1742,7 +1745,8 @@ export default function App() {
 
   const downloadCSV = (outputDateRange: Date[] = dateRange) => {
     if (!outputDateRange.length) return;
-    const exportEmployees = sortEmployeesForDisplay(employees);
+    const exportKeys = outputDateRange.map(date => getDateStr(date));
+    const exportEmployees = sortEmployeesForDisplay(employees).filter(item => isPresentInDates(item, exportKeys));
     const headers = ["日付", "曜日", ...exportEmployees.map(e => `${e.name}(シフト)`)];
     const rows = outputDateRange.map(date => {
       const row = [
@@ -1778,7 +1782,8 @@ export default function App() {
     if (!outputDateRange.length) return;
     try {
       const { renderShiftImage } = await import("./lib/shift-image");
-      const list = sortEmployeesForDisplay(employees).filter(item => (item as Employee & { active?: boolean }).active !== false);
+      const outputKeys = outputDateRange.map(date => getDateStr(date));
+      const list = sortEmployeesForDisplay(employees).filter(item => (item as Employee & { active?: boolean }).active !== false && isPresentInDates(item, outputKeys));
       const sameAsCurrent = dateRange.length > 0 && getDateStr(outputDateRange[0]) === getDateStr(dateRange[0]);
       const kind = sameAsCurrent && isLocked ? "確定シフト" : "シフト案";
       const rangeLabel = `${format(outputDateRange[0], "M/d")}〜${format(outputDateRange[outputDateRange.length - 1], "M/d")}`;
@@ -1823,7 +1828,8 @@ export default function App() {
   const buildExcel = async (outputDateRange: Date[]) => {
     if (!outputDateRange.length) return;
     const ExcelJS = await import("exceljs");
-    const exportEmployees = sortEmployeesForDisplay(employees);
+    const excelKeys = outputDateRange.map(date => getDateStr(date));
+    const exportEmployees = sortEmployeesForDisplay(employees).filter(item => isPresentInDates(item, excelKeys));
     const workbook = new ExcelJS.Workbook();
     const borderStyle = {
       top: { style: 'thin' },

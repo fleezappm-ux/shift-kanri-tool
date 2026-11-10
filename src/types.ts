@@ -52,6 +52,9 @@ export interface Employee {
   aliases?: string[];
   role?: EmployeeRole;
   roleId?: string;
+  /** 在籍の最初の日・最後の日（yyyy-MM-dd）。空ならずっと在籍。 */
+  activeFrom?: string;
+  activeUntil?: string;
   shifts: DayShift[];
 }
 

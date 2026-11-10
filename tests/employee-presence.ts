@@ -1,0 +1,11 @@
+import { isPresentInDates, isPresentOnDate } from "../src/lib/employee-master-sync";
+const assert = (c: boolean, m: string) => { console.log((c ? "PASS: " : "FAIL: ") + m); if (!c) process.exit(1); };
+const kodama = { activeUntil: "2026-11-20" };
+const kobayashi = { activeFrom: "2026-11-21" };
+const oldPeriod = ["2026-10-21", "2026-11-20"];
+const newPeriod = ["2026-11-21", "2026-12-20"];
+assert(isPresentInDates(kodama, oldPeriod) && !isPresentInDates(kobayashi, oldPeriod), "在籍期間: 11/20までの期間は児玉さんだけ出る");
+assert(!isPresentInDates(kodama, newPeriod) && isPresentInDates(kobayashi, newPeriod), "在籍期間: 11/21からの期間は小林さんだけ出る");
+assert(isPresentOnDate({}, "2030-01-01") && isPresentInDates({}, newPeriod), "在籍期間: 空ならずっと在籍");
+assert(isPresentOnDate(kodama, "2026-11-20") && !isPresentOnDate(kodama, "2026-11-21"), "在籍期間: 最後の日は在籍、翌日から不在");
+assert(isPresentInDates(kodama, ["2026-11-15", "2026-11-25"]), "在籍期間: 期間の途中まで在籍なら列は出す");

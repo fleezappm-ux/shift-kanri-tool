@@ -13,6 +13,9 @@ export interface EmployeeMasterItem {
   aliases: string[];
   role?: EmployeeRole;
   roleId?: string;
+  /** 在籍の最初の日・最後の日（yyyy-MM-dd）。空ならずっと在籍。 */
+  activeFrom?: string;
+  activeUntil?: string;
 }
 
 export interface ShiftRole { id: string; name: string }
@@ -70,6 +73,18 @@ export async function saveHomeLayout(layout: HomeLayout): Promise<HomeLayout> {
   return json.layout;
 }
 
+/** その日（yyyy-MM-dd）に在籍している人か。開始日・終了日が空ならずっと在籍。 */
+export function isPresentOnDate(employee: { activeFrom?: string; activeUntil?: string }, date: string): boolean {
+  if (employee.activeFrom && date < employee.activeFrom) return false;
+  if (employee.activeUntil && date > employee.activeUntil) return false;
+  return true;
+}
+/** 表示する期間（日付の並び）のうち、1日でも在籍している人か。 */
+export function isPresentInDates(employee: { activeFrom?: string; activeUntil?: string }, dates: string[]): boolean {
+  if (!dates.length) return true;
+  return dates.some(date => isPresentOnDate(employee, date));
+}
+
 export function mergeEmployeesWithMaster(source: Employee[], master: EmployeeMasterItem[]): Employee[] {
   // 人の特定は「ID」だけで行います。名前・別名で探すのは、IDがまだ従業員マスタに無い古い記録だけです。
   // （名前を付け替えたときに、別の人のシフトが混ざらないようにするため）
@@ -89,6 +104,8 @@ export function mergeEmployeesWithMaster(source: Employee[], master: EmployeeMas
       aliases: item.aliases || [],
       role: item.role || matches.find(employee => employee.role)?.role,
       roleId: item.roleId,
+      activeFrom: item.activeFrom || "",
+      activeUntil: item.activeUntil || "",
       shifts: matches.flatMap(employee => employee.shifts)
     };
   });

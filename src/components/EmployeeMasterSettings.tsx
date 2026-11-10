@@ -19,7 +19,7 @@ export function EmployeeMasterSettings({ employees, roles, onSave, operatorId, l
     catch (error) { toast.error(error instanceof Error ? error.message : "PINをリセットできませんでした"); }
     finally { setPinResetting(""); }
   };
-  const signature = (items: EmployeeMasterItem[]) => JSON.stringify(items.map((item, index) => [item.id, item.name.trim(), item.roleId || item.role || "", item.active, index, (item.aliases || []).length]));
+  const signature = (items: EmployeeMasterItem[]) => JSON.stringify(items.map((item, index) => [item.id, item.name.trim(), item.roleId || item.role || "", item.active, index, (item.aliases || []).length, item.activeFrom || "", item.activeUntil || ""]));
   const syncedRef = useRef(employees);
   const [newerFromServer, setNewerFromServer] = useState<EmployeeMasterItem[] | null>(null);
   const dirty = signature(drafts) !== signature(syncedRef.current);
@@ -94,6 +94,12 @@ export function EmployeeMasterSettings({ employees, roles, onSave, operatorId, l
       <Input value={item.name} aria-label="名前" placeholder="名前" onChange={event => { const name = event.target.value; update(item.id, { name, displayName: name }); }} />
       <select className="h-10 rounded-md border bg-white px-3 text-sm" value={item.roleId || roles.find(role => role.name === item.role)?.id || ""} onChange={event => { const role = roles.find(candidate => candidate.id === event.target.value); update(item.id, { roleId: role?.id || "", role: role?.name || "" }); }}><option value="">役職を選択</option>{roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</select>
       <div className="flex gap-1"><Button variant="outline" size="icon" aria-label="上へ移動" disabled={index === 0} onClick={() => move(drafts.indexOf(item), -1)}><ArrowUp className="h-4 w-4" /></Button><Button variant="outline" size="icon" aria-label="下へ移動" disabled={index === activeDrafts.length - 1} onClick={() => move(drafts.indexOf(item), 1)}><ArrowDown className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-red-600" aria-label="削除" onClick={() => remove(item.id)}><Trash2 className="h-4 w-4" /></Button></div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 sm:col-span-full">
+        <span className="font-bold">在籍期間</span>
+        <label className="flex items-center gap-1">いつから<Input type="date" className="h-9 w-40" aria-label={`${item.name || "この人"}の在籍開始日`} value={item.activeFrom || ""} max={item.activeUntil || undefined} onClick={event => { try { event.currentTarget.showPicker?.(); } catch { /* 古いブラウザでは何もしない */ } }} onChange={event => update(item.id, { activeFrom: event.target.value })} /></label>
+        <label className="flex items-center gap-1">いつまで<Input type="date" className="h-9 w-40" aria-label={`${item.name || "この人"}の在籍終了日`} value={item.activeUntil || ""} min={item.activeFrom || undefined} onClick={event => { try { event.currentTarget.showPicker?.(); } catch { /* 古いブラウザでは何もしない */ } }} onChange={event => update(item.id, { activeUntil: event.target.value })} /></label>
+        {(item.activeFrom || item.activeUntil) ? <button type="button" className="font-bold text-blue-700 underline" onClick={() => update(item.id, { activeFrom: "", activeUntil: "" })}>期間をなくす（ずっと在籍）</button> : <span>空のままなら、ずっと在籍</span>}
+      </div>
     </div>)}</div>
     <details className="rounded-xl border border-slate-200 bg-white p-4" data-pin-reset>
       <summary className="cursor-pointer text-sm font-black text-slate-900"><KeyRound className="mr-1 inline h-4 w-4" />PIN（暗証番号）のリセット</summary>

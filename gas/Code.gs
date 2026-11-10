@@ -900,6 +900,8 @@ function normalizeShiftEmployeeMaster(items, rolesOverride) {
       displayName: sanitizeText(item.displayName, 100).trim() || sanitizeText(item.name, 100).trim(),
       displayOrder: index + 1,
       active: item.active !== false,
+      activeFrom: /^\d{4}-\d{2}-\d{2}$/.test(String(item.activeFrom || "")) ? String(item.activeFrom) : "",
+      activeUntil: /^\d{4}-\d{2}-\d{2}$/.test(String(item.activeUntil || "")) ? String(item.activeUntil) : "",
       aliases: (Array.isArray(item.aliases) ? item.aliases : []).slice(0, 20).map(function(name) { return sanitizeText(name, 100).trim(); }).filter(Boolean)
       ,roleId: selected ? selected.id : "", role: selected ? selected.name : ""
     };

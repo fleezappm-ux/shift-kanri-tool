@@ -1870,9 +1870,16 @@ export default function App() {
 
     const periodStr = `集計期間: ${format(outputDateRange[0], "yyyy/MM/dd")} 〜 ${format(outputDateRange[outputDateRange.length - 1], "yyyy/MM/dd")}`;
     const outputDateStr = `出力日: ${format(new Date(), "yyyy/MM/dd")}`;
-    const metaRow = overallSheet.addRow([periodStr, ...Array(exportEmployees.length + 1).fill(""), outputDateStr]);
-    overallSheet.mergeCells(2, 1, 2, totalCols - 2);
-    metaRow.getCell(totalCols).alignment = { horizontal: 'right' };
+    // 表の列数（日付＋従業員＋備考）にぴったり合わせる。左に集計期間、右端（最後の2列）に出力日
+    const metaRow = overallSheet.addRow([periodStr, ...Array(exportEmployees.length).fill(""), outputDateStr]);
+    if (totalCols >= 4) {
+      overallSheet.mergeCells(2, 1, 2, totalCols - 2);
+      overallSheet.mergeCells(2, totalCols - 1, 2, totalCols);
+      metaRow.getCell(totalCols - 1).value = outputDateStr;
+      metaRow.getCell(totalCols - 1).alignment = { horizontal: 'right' };
+    } else {
+      metaRow.getCell(totalCols).alignment = { horizontal: 'right' };
+    }
     overallSheet.addRow([]); // 空行
 
     const overallHeaders = ["日付", ...exportEmployees.map(e => e.name), "備考"];

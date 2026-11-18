@@ -94,6 +94,7 @@ import { ToolHelp } from "./components/ToolHelp";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { SaveStatus } from "./components/SaveStatus";
 import { useUnsavedGuard } from "./lib/unsaved";
+import { outputMetaLayout } from "./lib/excel-meta";
 import { EmployeeMasterItem, isPresentInDates, isPresentOnDate, fetchEmployeeMaster, mergeEmployeesWithMaster, saveEmployeeMaster, DEFAULT_HOME_LAYOUT, DEFAULT_ROLES, fetchShiftRoles, fetchHomeLayout, saveShiftRoles, saveHomeLayout, ShiftRole, HomeLayout } from "./lib/employee-master-sync";
 import { fetchCycleMaster, saveCycleMaster } from "./lib/cycle-master-sync";
 import { BoardPeriod, BulletinBoard } from "./components/BulletinBoard";
@@ -1871,15 +1872,10 @@ export default function App() {
     const periodStr = `集計期間: ${format(outputDateRange[0], "yyyy/MM/dd")} 〜 ${format(outputDateRange[outputDateRange.length - 1], "yyyy/MM/dd")}`;
     const outputDateStr = `出力日: ${format(new Date(), "yyyy/MM/dd")}`;
     // 表の列数（日付＋従業員＋備考）にぴったり合わせる。左に集計期間、右端（最後の2列）に出力日
-    const metaRow = overallSheet.addRow([periodStr, ...Array(exportEmployees.length).fill(""), outputDateStr]);
-    if (totalCols >= 4) {
-      overallSheet.mergeCells(2, 1, 2, totalCols - 2);
-      overallSheet.mergeCells(2, totalCols - 1, 2, totalCols);
-      metaRow.getCell(totalCols - 1).value = outputDateStr;
-      metaRow.getCell(totalCols - 1).alignment = { horizontal: 'right' };
-    } else {
-      metaRow.getCell(totalCols).alignment = { horizontal: 'right' };
-    }
+    const metaLayout = outputMetaLayout(totalCols, periodStr, outputDateStr);
+    const metaRow = overallSheet.addRow(metaLayout.cells);
+    metaLayout.merges.forEach(([from, to]) => overallSheet.mergeCells(2, from, 2, to));
+    metaRow.getCell(metaLayout.dateColumn).alignment = { horizontal: 'right' };
     overallSheet.addRow([]); // 空行
 
     const overallHeaders = ["日付", ...exportEmployees.map(e => e.name), "備考"];

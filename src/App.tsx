@@ -1206,8 +1206,9 @@ export default function App() {
 
   // 他の端末で変更されたシフトを、画面を開いたとき・1分半ごとに読み直す（入力中・保存待ちのときは読み直さない）。
   // 読み直さないと、スマホに古いシフトが残り、「入れたのに反映されない」ように見えてしまいます。
-  const liveRef = useRef({ employees, employeeMaster, syncState, busy: false });
-  liveRef.current = { employees, employeeMaster, syncState, busy: !!overviewCell || autoDraftRun.state === "running" || dayLabelDialog !== null };
+  const liveRef = useRef({ employees, employeeMaster, syncState, busy: false, masterEditing: false });
+  // 従業員マスタの設定画面を開いている間は、編集中の内容を消さないよう、マスタの読み直しをしない
+  liveRef.current = { employees, employeeMaster, syncState, busy: !!overviewCell || autoDraftRun.state === "running" || dayLabelDialog !== null, masterEditing: settingsPage === "employee" };
   const refreshingShiftsRef = useRef(false);
   useEffect(() => {
     if (!appSession?.token || !initialSyncComplete) return;
@@ -1219,13 +1220,20 @@ export default function App() {
       refreshingShiftsRef.current = true;
       try {
         const revision = editRevisionRef.current;
-        const merged = await fetchShiftsFromServer(live.employees, false);
+        // 先に従業員マスタを取り直し、新しく入った人の分もシフトを読み込む
+        const freshMaster = live.masterEditing ? null : await fetchEmployeeMaster().catch(() => null);
+        if (cancelled) return;
+        const merged = await fetchShiftsFromServer(freshMaster ? mergeEmployeesWithMaster(live.employees, freshMaster) : live.employees, false);
         if (!merged || cancelled) return;
         // 読み込み中に入力が始まっていたら、入力を優先して捨てる
         if (editRevisionRef.current !== revision || editRevisionRef.current > savedRevisionRef.current || liveRef.current.busy || liveRef.current.syncState !== "saved") return;
-        const next = mergeEmployeesWithMaster(merged.employees, liveRef.current.employeeMaster);
+        // 他の端末で従業員（在籍期間・並び順など）を変えたときも、この端末に反映する
+        const masterChanged = !!freshMaster && !liveRef.current.masterEditing && JSON.stringify(freshMaster) !== JSON.stringify(liveRef.current.employeeMaster);
+        const nextMaster = masterChanged && freshMaster ? freshMaster : liveRef.current.employeeMaster;
+        const next = mergeEmployeesWithMaster(merged.employees, nextMaster);
         const signature = (list: Employee[]) => JSON.stringify(list.map(item => [item.id, [...item.shifts].filter(shift => shift.shift).map(shift => [shift.date.slice(0, 10), shift.shift, shift.customShiftText || "", shift.leave || "", shift.breakTime || "", shift.workTime || ""]).sort()]));
-        if (signature(next) === signature(liveRef.current.employees)) return;
+        if (masterChanged && freshMaster) { templateStorage.setItem(EMPLOYEE_MASTER_CACHE_KEY, JSON.stringify(freshMaster)); setEmployeeMaster(freshMaster); }
+        if (signature(next) === signature(liveRef.current.employees) && !masterChanged) return;
         seedSavedBaseline(merged.employees);
         skipDirtyRef.current = true;
         setEmployees(next);
